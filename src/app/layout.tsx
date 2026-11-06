@@ -5,6 +5,7 @@ import Notice from '@/components/Notice';
 import './globals.css';
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.SITE_URL ?? 'http://localhost:3000'),
   title: { default: 'PJK / DEV WORLD', template: '%s · PJK / DEV WORLD' },
   description: '픽셀 월드와 온톨로지 지식 지도로 엮은 개발 블로그. 지식 도서관 · 여관 · 프로젝트 숲.',
 };
