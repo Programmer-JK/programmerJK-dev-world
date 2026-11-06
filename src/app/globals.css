@@ -560,6 +560,25 @@ img.px,
   animation: beacon 2.4s steps(4) infinite;
 }
 
+/* 등대 불빛: 은은하게 깜빡이고, 두드릴수록(--glow) 밝아집니다. */
+.lighthouse {
+  opacity: calc(.55 * var(--glow));
+  transform: scale(var(--glow));
+  transform-origin: 50% 24%;
+  transition: transform .15s steps(3), opacity .15s steps(3);
+  animation: lhglow 2.4s steps(4) infinite;
+}
+
+.lighthouse:hover {
+  opacity: calc(.8 * var(--glow));
+}
+
+@keyframes lhglow {
+  50% {
+    filter: brightness(1.6);
+  }
+}
+
 .ring {
   animation: ring 1.6s ease-out infinite;
 }

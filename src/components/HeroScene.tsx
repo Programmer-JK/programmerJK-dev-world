@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 
 /**
  * 노을 지는 픽셀 풍경. 레이어: 하늘 → 흐르는 구름 → 지형/호수 → 앞쪽 언덕(좌·우).
@@ -15,8 +15,36 @@ const FLIES = Array.from({ length: 12 }, (_, i) => ({
   x: 18 + ((i * 37) % 60), y: 58 + ((i * 23) % 32), d: (i * 0.7) % 5, c: i % 3 ? '#d7f36b' : '#ffd77e',
 }));
 
+/** 문 두드리는 소리. 파일 없이 Web Audio로 짧은 '똑' 소리를 합성합니다. */
+let audio: AudioContext | null = null;
+function knock() {
+  try {
+    audio ??= new AudioContext();
+    const t = audio.currentTime, o = audio.createOscillator(), g = audio.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(190, t);
+    o.frequency.exponentialRampToValueAtTime(70, t + 0.09);
+    g.gain.setValueAtTime(0.7, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
+    o.connect(g).connect(audio.destination);
+    o.start(t); o.stop(t + 0.14);
+  } catch {}
+}
+
 export default function HeroScene({ children }: { children: React.ReactNode }) {
   const ref = useRef<HTMLElement>(null);
+  const [knocks, setKnocks] = useState(0);
+  const lastKnock = useRef(0);
+
+  // 등대를 1.5초 간격 안에 세 번 두드리면 숨은 게임(ZoraRun)이 열립니다.
+  const onLighthouse = () => {
+    knock();
+    const now = Date.now();
+    const n = now - lastKnock.current < 1500 ? knocks + 1 : 1;
+    lastKnock.current = now;
+    if (n >= 3) { setKnocks(0); window.dispatchEvent(new Event('zora:run')); }
+    else setKnocks(n);
+  };
 
   const onMove = (e: React.PointerEvent) => {
     const el = ref.current;
@@ -56,6 +84,13 @@ export default function HeroScene({ children }: { children: React.ReactNode }) {
       <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', transform: 'translate3d(calc(var(--px) * -18px), 0, 0)', transition: 'transform .5s ease-out' }}>
         <img className="px fg-side" src="/pixel/fg-left.png" alt="" style={{ position: 'absolute', left: -24, bottom: 0, height: 'max(56.25vw, 860px)', width: 'auto' }} />
         <img className="px fg-side" src="/pixel/fg-right.png" alt="" style={{ position: 'absolute', right: -24, bottom: 0, height: 'max(56.25vw, 860px)', width: 'auto' }} />
+      </div>
+      {/* 등대 클릭 영역. 본문 레이어(z 2) 위에 있어야 클릭되므로 같은 좌표계로 따로 올립니다. */}
+      <div style={{ position: 'absolute', left: '50%', bottom: 0, width: 'max(100%, 1530px)', aspectRatio: '480 / 270', transform: 'translateX(-50%)', pointerEvents: 'none', zIndex: 3 }}>
+        <button type="button" tabIndex={-1} aria-hidden onClick={onLighthouse} className="lighthouse"
+          style={{ position: 'absolute', left: '78%', top: '19%', width: '5.5%', height: '43%', padding: 0, border: 0, cursor: 'pointer', pointerEvents: 'auto',
+            background: 'radial-gradient(circle at 50% 24%, rgba(244,255,194,.55), rgba(215,243,107,.18) 22%, transparent 48%)',
+            ['--glow' as string]: 1 + knocks * 0.6 }} />
       </div>
       <div className="wrap hero-pad" style={{ position: 'relative', zIndex: 2, paddingTop: 96, paddingBottom: 160 }}>
         {children}

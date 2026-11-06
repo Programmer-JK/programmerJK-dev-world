@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import Header from '@/components/Header';
 import Notice from '@/components/Notice';
+import ZoraRun from '@/components/ZoraRun';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Header />
         {children}
         <Suspense fallback={null}><Notice /></Suspense>
+        <ZoraRun />
       </body>
     </html>
   );
