@@ -1,0 +1,60 @@
+---
+title: "div+object-cover 패턴"
+date: 2025-01-12
+island: library
+room: frontend
+tags: []
+---
+웹 개발에서 이미지를 다룰 때 div와 object-cover를 함께 사용하는 것이 표준 패턴으로 자리 잡았습니다. 이 패턴이 왜 효과적인지, 어떻게 활용하면 좋은지 알아보겠습니다.
+
+## 기본 구조
+
+가장 기본적인 형태는 다음과 같습니다:
+```html
+<div class="container">
+  <img src="image.jpg" class="object-cover" alt="image" />
+</div>
+```
+
+## div가 필요한 이유
+
+div 컨테이너는 다음과 같은 중요한 역할을 합니다:
+
+1. 이미지 크기와 비율 제어
+2. 이미지 잘림 영역 관리
+3. 레이아웃 구성을 위한 wrapper
+4. 이미지 로딩 전 공간 유지
+5. 추가 스타일링을 위한 기반
+
+## 실전 활용 예시
+
+### 1. 정사각형 썸네일
+```html
+<div class="w-[200px] h-[200px]">
+  <img src="thumbnail.jpg" class="w-full h-full object-cover" alt="thumbnail" />
+</div>
+```
+
+### 2. 16:9 비율 카드 이미지
+```html
+<div class="w-full aspect-video">
+  <img src="card.jpg" class="w-full h-full object-cover" alt="card" />
+</div>
+```
+
+### 3. 원형 프로필 이미지
+```html
+<div class="w-[50px] h-[50px] rounded-full overflow-hidden">
+  <img src="profile.jpg" class="w-full h-full object-cover" alt="profile" />
+</div>
+```
+
+## 패턴의 장점
+
+1. 일관된 이미지 표시
+2. 반응형 디자인 용이
+3. 레이아웃 안정성 향상
+4. 스타일링 유연성
+5. 이미지 비율 유지
+
+이 패턴은 현대 웹 개발에서 이미지를 다루는 가장 효과적인 방법 중 하나이며, 특히 반응형 디자인에서 큰 강점을 발휘합니다.

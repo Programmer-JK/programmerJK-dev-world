@@ -1,0 +1,84 @@
+---
+title: "iOS autofocus 활성화와 보안 이슈"
+summary: "iOS 웹뷰에서의 autofocus 제한 정책, 보안상 이유, Angular와 Vue 프레임워크에서의 차이점 및 대응 방안 분석"
+date: 2025-01-24
+island: library
+room: frontend
+tags: ["iOS", "WebView", "security", "Angular", "Vue"]
+---
+예전 모바일 프로젝트 진행할 당시, angular에서 vue로 클라이언트 화면을 전환하는 과정에서 ios에서만 발견되는 이슈사항이 있었다. 바로 HTML input 요소의 autofocus 속성이 동작하지 않는 것인데요. 이는 단순한 버그가 아닌 iOS의 중요한 보안 정책입니다.
+
+## iOS의 autofocus 제한 정책
+
+iOS에서는 사용자의 직접적인 액션(터치) 없이 키보드가 자동으로 올라오는 것을 제한합니다. 이러한 정책이 적용된 이유는 다음과 같습니다:
+
+### 1. 피싱 공격 방지
+
+자동으로 키보드가 활성화되면 악의적인 웹사이트에서 사용자의 입력을 유도하기 쉬워집니다. 예를 들어:
+- 가짜 로그인 화면을 띄우고 자동으로 키보드를 활성화
+- 사용자가 상황을 인지하기 전에 민감한 정보 입력을 유도
+
+### 2. 의도하지 않은 데이터 입력 방지
+
+- 페이지 로드 시 자동으로 키보드가 올라오면 사용자 경험을 해칠 수 있음
+- 모바일 화면의 절반 이상을 키보드가 차지하여 콘텐츠 가시성을 저하
+- 의도하지 않은 입력으로 인한 오류 발생 가능성
+
+## 개발자를 위한 대응 방안
+
+이러한 정책에 맞춰 개발할 때는 다음과 같은 방법을 고려해볼 수 있습니다:
+
+### 권장되는 접근 방식
+```javascript
+// 사용자 액션에 따른 포커스 처리
+button.addEventListener('click', () => {
+    inputElement.focus();
+});
+
+// 또는 특정 영역 터치 시 포커스
+inputContainer.addEventListener('touchstart', () => {
+    inputElement.focus();
+});
+```
+> **INFO**
+>
+> ### 주의사항
+> - 자동 포커스 대신 시각적 가이드 제공
+> - 명확한 사용자 액션 유도
+> - 접근성을 고려한 UI/UX 설계
+
+
+프레임워크 간의 차이를 더 구체적으로 설명하겠습니다:
+
+### Angular와 Vue에서의 차이점
+Angular와 Vue는 동일한 iOS WebView에서 실행되지만, 다음과 같은 핵심적인 차이로 인해 autofocus 동작이 달라졌다고 생각은 합니다.
+
+#### 1. 컴포넌트 생명주기 처리
+- Angular: `ngAfterViewInit()`에서 DOM 요소가 완전히 초기화된 후 focus 처리
+- Vue: `mounted()` 훅에서는 Virtual DOM 동기화 시점 차이로 focus가 즉시 적용되지 않을 수 있음
+
+#### 2. DOM 접근 방식
+```javascript
+// Angular
+@ViewChild('input') input: ElementRef;
+ngAfterViewInit() {
+    this.input.nativeElement.focus();
+}
+
+// Vue
+mounted() {
+    this.$nextTick(() => {
+        this.$refs.input.focus();
+    });
+}
+```
+
+#### 3. 이벤트 위임(Event Delegation) 차이
+- Angular: Zone.js를 통한 이벤트 처리로 사용자 인터랙션 추적이 더 정확할 수 있음
+- Vue: 이벤트 버블링과 위임 처리가 다르게 동작하여 focus 타이밍에 영향을 줄 수 있음
+
+이러한 차이들로 인해 동일한 iOS 보안 정책 하에서도 focus 동작이 다르게 나타날 수 있습니다.
+
+## 결론
+
+iOS의 autofocus 제한은 사용자 보안을 위한 중요한 정책입니다. 개발자는 이러한 정책을 이해하고 사용자 경험을 해치지 않는 범위 내에서 대안을 마련해야 합니다. 보안과 사용성의 균형을 맞추는 것이 핵심입니다.

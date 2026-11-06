@@ -1,0 +1,37 @@
+---
+title: "declare와 export type 차이"
+summary: "TypeScript에서 declare와 export type의 차이점 및 사용법에 대한 설명"
+date: 2024-12-18
+island: library
+room: frontend
+tags: ["typescript", "declare", "export-type", "type-definition"]
+---
+`declare`와 `export type`은 다른 용도로 사용됩니다:
+
+```typescript
+// 1. declare - 타입이 "존재한다"고 선언만 함
+declare interface UserType {
+  name: string;
+}
+
+// 2. export type - 실제 타입을 정의하고 다른 파일에서 임포트해서 사용할 수 있게 함
+export type APIResult<T> = T | {
+  code: number;
+  message: string;
+}
+```
+
+실제 사용 예시를 보면:
+```typescript
+// declare는 타입이 어딘가 있다고 선언만 함 (구현 X)
+declare const myAPI: UserType;
+
+// export type은 실제 사용할 타입을 정의하고 내보내기
+// 다른 파일에서:
+import type { APIResult } from './types';
+const response: APIResult<UserData> = await fetchUser();
+```
+
+간단히 말하면:
+- `declare`: "이런게 있어!" 하고 TypeScript에게 알려주기만 함
+- `export type`: 실제 타입을 정의하고 다른 파일에서 사용할 수 있게 내보내기

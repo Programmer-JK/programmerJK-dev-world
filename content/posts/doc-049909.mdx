@@ -1,0 +1,405 @@
+---
+title: "LAMP 스택 설치 및 구성 가이드"
+summary: "Linux, Apache(Nginx), MySQL, PHP 스택의 상세 설치 및 설정 가이드"
+date: 2024-12-03
+island: library
+room: devops
+tags: ["lamp-stack", "web-server", "mysql", "php", "nginx", "server-configuration", "system-administration"]
+---
+## 1. 기본 시스템 준비
+
+```bash
+# 시스템 업데이트
+sudo apt update
+sudo apt upgrade -y
+```
+
+## 2. 주요 구성요소 설치
+
+### Nginx 웹서버
+
+```bash
+sudo apt install nginx -y
+sudo systemctl start nginx
+sudo systemctl enable nginx
+```
+
+### MySQL 데이터베이스
+
+```bash
+# 설치
+sudo apt install mysql-server -y
+sudo systemctl start mysql
+sudo systemctl enable mysql
+
+# 보안 설정
+sudo mysql_secure_installation
+```
+
+### PHP 및 모듈
+
+```bash
+# 기본 설치
+sudo apt install php-fpm php-mysql -y
+
+# 추가 모듈
+sudo apt install php-curl php-gd php-intl php-mbstring php-soap php-xml php-xmlrpc php-zip -y
+
+# PHP-FPM 활성화
+sudo systemctl start php8.1-fpm
+sudo systemctl enable php8.1-fpm
+```
+
+## 3. Nginx 구성
+
+### 기본 설정
+
+```nginx
+server {
+    listen 80 default_server;
+    root /var/www/html;
+    index index.php index.html;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/var/run/php/php8.1-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_intercept_errors on;
+    }
+}
+```
+
+## 4. MySQL 권한 관리
+
+### 사용자 관리
+
+```sql
+-- 사용자 생성
+CREATE USER '사용자'@'localhost' IDENTIFIED BY '비밀번호';
+CREATE USER '사용자'@'%' IDENTIFIED BY '비밀번호';
+
+-- 권한 부여
+GRANT ALL PRIVILEGES ON 데이터베이스.* TO '사용자'@'localhost';
+GRANT SELECT, INSERT ON 데이터베이스.* TO '사용자'@'%';
+
+-- 권한 적용
+FLUSH PRIVILEGES;
+```
+
+### 원격 접속 설정
+
+```bash
+# MySQL 설정
+bind-address = 0.0.0.0
+
+# 방화벽 설정
+sudo ufw allow 3306/tcp
+```
+
+## 5. 보안 설정
+
+### 파일 권한
+
+```bash
+sudo chown -R www-data:www-data /var/www/html
+sudo chmod -R 755 /var/www/html
+```
+
+### 방화벽 관리
+
+```bash
+# Ubuntu/Debian
+sudo ufw status
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+
+# CentOS/RHEL
+sudo firewall-cmd --list-all
+sudo firewall-cmd --permanent --add-service=http
+sudo firewall-cmd --permanent --add-service=https
+sudo firewall-cmd --reload
+```
+
+## 6. 연결 테스트
+
+### 서비스 상태 확인
+
+```bash
+# 웹서버
+sudo nginx -t
+sudo systemctl status nginx
+
+# PHP
+sudo systemctl status php8.1-fpm
+
+# MySQL
+sudo systemctl status mysql
+```
+
+### MySQL 연결 테스트
+
+```bash
+# 로컬 테스트
+mysql -u root -p
+
+# 원격 테스트
+telnet 서버IP 3306
+nc -zv 서버IP 3306
+```
+
+## 7. 문제 해결
+
+1. 로그 확인
+
+   - Nginx: `/var/log/nginx/error.log`
+   - PHP: `/var/log/php8.1-fpm.log`
+   - MySQL: `/var/log/mysql/error.log`
+
+2. 권한 문제
+
+   - 파일 소유권 재설정
+   - SELinux 설정 확인 (CentOS)
+
+3. 방화벽 이슈
+   - 포트 상태 확인
+   - iptables 규칙 검증
+
+## 8. MySQL 상세 설정
+
+### 사용자 권한 관리
+
+```sql
+-- 권한 조회
+SHOW GRANTS FOR '사용자'@'localhost';
+SELECT user, host FROM mysql.user;
+
+-- 비밀번호 변경
+ALTER USER '사용자'@'localhost' IDENTIFIED BY '새비밀번호';
+
+-- 불필요한 계정 정리
+DELETE FROM mysql.user
+WHERE NOT (user = '보존할사용자' AND host = '보존할호스트')
+  AND user != 'root';
+```
+
+### 보안 설정
+
+```sql
+-- 원격 root 로그인 비활성화
+DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
+
+-- 익명 사용자 제거
+DELETE FROM mysql.user WHERE User='';
+
+-- test 데이터베이스 제거
+DROP DATABASE IF EXISTS test;
+```
+
+## 9. PHP-FPM 상세 설정
+
+### www.conf 설정
+
+```ini
+# /etc/php/8.1/fpm/pool.d/www.conf
+[www]
+user = www-data
+group = www-data
+listen = /var/run/php/php8.1-fpm.sock
+listen.owner = www-data
+listen.group = www-data
+listen.mode = 0660
+
+# 프로세스 관리
+pm = dynamic
+pm.max_children = 5
+pm.start_servers = 2
+pm.min_spare_servers = 1
+pm.max_spare_servers = 3
+```
+
+### php.ini 주요 설정
+
+```ini
+# /etc/php/8.1/fpm/php.ini
+memory_limit = 256M
+upload_max_filesize = 64M
+post_max_size = 64M
+max_execution_time = 300
+max_input_time = 300
+display_errors = Off
+error_reporting = E_ALL & ~E_DEPRECATED & ~E_STRICT
+```
+
+## 10. 모니터링 및 디버깅
+
+### MySQL 모니터링
+
+```sql
+-- 현재 연결 상태
+SHOW PROCESSLIST;
+
+-- 시스템 변수 확인
+SHOW VARIABLES LIKE '%max_connections%';
+SHOW VARIABLES LIKE '%timeout%';
+
+-- 상태 확인
+SHOW STATUS LIKE 'Threads%';
+SHOW STATUS LIKE 'Questions';
+```
+
+### PHP 모니터링
+
+```bash
+# PHP-FPM 상태 페이지 설정
+location /status {
+    access_log off;
+    allow 127.0.0.1;
+    deny all;
+    include fastcgi_params;
+    fastcgi_param SCRIPT_NAME $uri;
+    fastcgi_pass unix:/var/run/php/php8.1-fpm.sock;
+}
+```
+
+## 11. 성능 최적화
+
+### MySQL 튜닝
+
+```ini
+# /etc/mysql/my.cnf
+innodb_buffer_pool_size = 1G
+innodb_log_file_size = 256M
+innodb_flush_log_at_trx_commit = 2
+innodb_flush_method = O_DIRECT
+```
+
+### Nginx 튜닝
+
+```nginx
+# worker_processes 설정
+worker_processes auto;
+
+# 버퍼 설정
+client_max_body_size 64m;
+client_body_buffer_size 128k;
+client_header_buffer_size 1k;
+
+# Gzip 압축
+gzip on;
+gzip_comp_level 5;
+gzip_types text/plain text/css application/json application/javascript;
+```
+
+## 12. SELinux 구성 (CentOS/RHEL)
+
+```bash
+# SELinux 상태 확인
+sestatus
+
+# 웹 디렉토리 컨텍스트 설정
+chcon -R -t httpd_sys_content_t /var/www/html/
+chcon -R -t httpd_sys_rw_content_t /var/www/html/writable_dir/
+
+# MySQL 관련 설정
+setsebool -P httpd_can_network_connect_db 1
+setsebool -P httpd_can_network_connect 1
+```
+
+## 13. SSL/TLS 설정
+
+### Let's Encrypt 인증서 설치
+
+```bash
+# Certbot 설치
+sudo apt install certbot python3-certbot-nginx
+
+# 인증서 발급
+sudo certbot --nginx -d example.com -d www.example.com
+
+# 자동 갱신 확인
+sudo certbot renew --dry-run
+```
+
+### Nginx SSL 설정
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name example.com;
+
+    ssl_certificate /etc/letsencrypt/live/example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+
+    # SSL 최적화
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:50m;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
+    ssl_prefer_server_ciphers off;
+}
+```
+
+## 14. 백업 설정
+
+### MySQL 백업
+
+```bash
+# 자동 백업 스크립트
+#!/bin/bash
+BACKUP_DIR="/backup/mysql"
+DATE=$(date +%Y%m%d)
+mysqldump --all-databases -u root -p[password] > $BACKUP_DIR/full_backup_$DATE.sql
+
+# 오래된 백업 삭제
+find $BACKUP_DIR -name "full_backup_*.sql" -mtime +7 -delete
+```
+
+### 웹 데이터 백업
+
+```bash
+# 웹 디렉토리 백업
+tar -czf /backup/www/website_$DATE.tar.gz /var/www/html/
+
+# 설정 파일 백업
+tar -czf /backup/config/nginx_$DATE.tar.gz /etc/nginx/
+tar -czf /backup/config/php_$DATE.tar.gz /etc/php/
+```
+
+## 15. 로그 관리
+
+### 로그 순환 설정
+
+```bash
+# /etc/logrotate.d/nginx
+/var/log/nginx/*.log {
+    daily
+    missingok
+    rotate 14
+    compress
+    delaycompress
+    notifempty
+    create 0640 www-data adm
+    sharedscripts
+    postrotate
+        /etc/init.d/nginx reload
+    endscript
+}
+```
+
+### 로그 모니터링
+
+```bash
+# 실시간 로그 모니터링
+tail -f /var/log/nginx/error.log
+tail -f /var/log/php8.1-fpm.log
+tail -f /var/log/mysql/error.log
+
+# 로그 분석 도구 설치
+sudo apt install goaccess
+goaccess /var/log/nginx/access.log
+```

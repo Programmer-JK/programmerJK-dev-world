@@ -1,0 +1,51 @@
+---
+title: "PostCSS란?"
+date: 2025-01-10
+island: library
+room: frontend
+tags: []
+---
+PostCSS는 CSS를 JavaScript로 변환하여 처리할 수 있게 해주는 도구(Tool)입니다. 쉽게 말해 "CSS 후처리기"라고 볼 수 있는데요, CSS를 프로그래밍적으로 처리할 수 있게 해주는 프레임워크입니다.
+
+## PostCSS의 주요 특징
+
+### 1. 플러그인 시스템
+PostCSS는 다양한 플러그인을 통해 CSS를 처리할 수 있습니다:
+
+- **Autoprefixer**: 브라우저 벤더 접두사(`-webkit-`, `-moz-` 등)를 자동으로 추가
+- **PostCSS Preset Env**: 최신 CSS 기능을 이전 버전 브라우저에서도 사용 가능하게 변환
+- **Tailwind CSS**: 유틸리티 기반의 CSS 프레임워크도 PostCSS의 플러그인으로 동작
+
+### 2. 모듈식 구조 예시
+
+```css
+/* 개발자가 작성한 CSS */
+.box {
+  display: flex;
+}
+
+/* PostCSS + Autoprefixer 처리 후 */
+.box {
+  display: -webkit-flex;
+  display: -moz-flex;
+  display: -ms-flex;
+  display: flex;
+}
+```
+
+### 3. Tailwind CSS와의 관계
+
+PostCSS는 Tailwind CSS의 기반 시스템으로 동작합니다:
+- Tailwind CSS는 PostCSS의 플러그인으로 작동
+- `bg-blue-500`과 같은 Tailwind 클래스를 실제 CSS로 변환하는 역할
+- 유틸리티 클래스들을 브라우저가 이해할 수 있는 CSS로 처리
+
+### 4. Docusaurus에서의 활용
+
+Docusaurus에서 Tailwind CSS를 사용하기 위해서는 PostCSS 설정이 필수적입니다:
+- Docusaurus의 빌드 과정에서 PostCSS가 Tailwind 클래스들을 처리
+- 유틸리티 클래스들을 실제 CSS로 변환하는 과정을 담당
+
+## 정리
+
+PostCSS는 현대 웹 개발에서 CSS를 더 효율적으로 처리할 수 있게 해주는 도구입니다. 특히 Tailwind CSS와 같은 유틸리티 기반 프레임워크의 동작을 가능하게 하는 핵심 시스템으로, CSS를 프로그래밍적으로 다룰 수 있게 해주는 강력한 도구라고 할 수 있습니다.

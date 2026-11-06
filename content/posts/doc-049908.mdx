@@ -1,0 +1,129 @@
+---
+title: "시스코 스위치 설정 가이드"
+summary: "시스코 스위치의 기본 설정부터 고급 기능까지 포괄적인 설정 가이드라인"
+date: 2024-11-16
+island: library
+room: devops
+tags: ["cisco-switch", "network-configuration", "vlan", "vtp", "qos", "snmp", "network-security", "switch-management"]
+---
+## 1. 기본 모드 전환 명령어
+
+- 일반 → 특권 모드: `enable`
+- 특권 → 전역 설정 모드: `config terminal`
+- 현재 모드 → 특권 모드: `end`
+- 현재 모드 → 이전 모드: `exit`
+
+## 2. 시스템 기본 설정
+
+```bash
+hostname [이름]                # 호스트명 설정
+no ip domain-lookup           # DNS 조회 비활성화
+no ip http server            # 웹 관리 비활성화
+service password-encryption   # 비밀번호 암호화
+ip default-gateway [IP주소]    # 기본 게이트웨이 설정
+```
+
+## 3. 인터페이스 설정
+
+```bash
+interface vlan 1
+  ip address [IP주소] [서브넷마스크]
+  no shutdown / shutdown      # 인터페이스 활성화/비활성화
+  speed auto 100             # 100Mbps 자동 설정
+  duplex full                # 전이중 통신
+```
+
+## 4. 보안 설정
+
+### 4.1 접근 제어
+
+```bash
+access-list 1 permit [IP주소]
+snmp-server community [커뮤니티명] RO 1
+```
+
+### 4.2 콘솔/텔넷 설정
+
+```bash
+line console 0
+line vty 0 4                 # 5개 세션 허용
+  password [암호]
+  access-class 1 in
+  exec-timeout 10 0          # 10분 자동 로그아웃
+```
+
+## 5. QoS(Quality of Service) 설정
+
+```bash
+mls qos                      # QoS 활성화
+policy-map [정책이름]
+  class class-default
+  police [속도] bps [버퍼크기] exceed-action drop
+```
+
+## 6. VTP(VLAN Trunking Protocol) 설정
+
+### 6.1 VTP 모드 종류
+
+1. Server 모드 (`vtp mode server`)
+
+   - VLAN 생성/수정/삭제 가능
+   - 설정을 다른 스위치에 전파
+   - NVRAM에 설정 저장
+   - 기본 모드
+
+2. Client 모드 (`vtp mode client`)
+
+   - VLAN 생성/수정/삭제 불가
+   - 서버로부터 설정 수신
+   - 다른 스위치에 전달
+
+3. Transparent 모드 (`vtp mode transparent`)
+   - 독립적 VLAN 관리
+   - VTP 정보 전달만 수행
+   - 자체 설정만 사용
+
+### 6.2 VTP 기본 설정
+
+```bash
+vtp domain [도메인명]
+vtp password [암호]
+```
+
+## 7. SNMP 설정
+
+### 7.1 기본 포트
+
+- UDP 161: 일반 SNMP 통신
+- UDP 162: SNMP Trap 수신
+
+### 7.2 주요 모니터링 항목
+
+- CPU 사용률
+- 메모리 사용량
+- 네트워크 트래픽
+- 시스템 상태
+
+## 8. 설정 관리
+
+```bash
+write                        # 설정 저장
+reload                       # 시스템 재부팅
+erase startup-config         # 시작 설정 삭제
+```
+
+## 9. 중요 참고사항
+
+1. 대부분의 설정은 config terminal 모드에서 실행
+2. 인터페이스 설정은 해당 인터페이스 모드에서 실행
+3. `no` 키워드로 설정 비활성화/제거 가능
+4. 설정 변경 후 반드시 `write` 명령어로 저장
+5. VLAN 삭제는 `no vlan [번호]` 또는 VLAN 데이터베이스에서 가능
+
+## 10. 유용한 추가 팁
+
+1. 설정 확인 시 `show running-config` 명령어 사용
+2. 인터페이스 상태 확인은 `show interfaces` 사용
+3. VLAN 정보 확인은 `show vlan` 명령어 활용
+4. VTP 상태 확인은 `show vtp status` 사용
+5. 문제 해결 시 `debug` 명령어 활용 가능

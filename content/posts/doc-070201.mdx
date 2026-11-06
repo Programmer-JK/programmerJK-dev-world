@@ -1,0 +1,248 @@
+---
+title: "Vue directive"
+summary: "Vue.js의 핵심 기능인 디렉티브의 기본 구조, 주요 디렉티브별 상세 설명, 사용 시 주의사항 및 실전 활용 예시"
+date: 2024-11-13
+island: library
+room: frontend
+tags: ["Vue.js", "directive", "frontend", "web-development"]
+---
+Vue.js에서 디렉티브(Directive)는 `v-` 접두사가 붙은 특수한 속성으로, DOM 엘리먼트에 특별한 반응형 동작이나 기능을 부여하는 데 사용됩니다.
+
+## 디렉티브의 기본 구조
+
+```html
+<element v-directive[:argument].[modifiers]="value"> </element>
+```
+
+각 부분의 의미:
+
+- `v-directive`: 디렉티브 이름
+- `argument`: 디렉티브가 받을 수 있는 인자
+- `modifiers`: 디렉티브의 동작을 변형하는 수식어
+- `value`: 디렉티브에 전달되는 값
+
+## 주요 디렉티브 상세 설명
+
+### 1. v-bind
+
+데이터를 HTML 속성에 바인딩합니다.
+
+##### 역할:
+
+- HTML 속성과 Vue 데이터를 동적으로 연결
+- class나 style 바인딩에 특별한 기능 제공
+- props 전달에 사용
+
+```html
+<!-- 기본 문법 -->
+<img v-bind:src="imagePath" />
+<!-- 축약형 -->
+<img :src="imagePath" />
+```
+
+### 2. v-on
+
+이벤트 리스너를 연결합니다.
+
+##### 역할:
+
+- DOM 이벤트 수신 및 처리
+- 메서드 호출이나 인라인 표현식 실행
+- 이벤트 수식어를 통한 이벤트 처리 제어
+
+```html
+<!-- 기본 문법 -->
+<button v-on:click="handleClick">
+  <!-- 축약형 -->
+  <button @click="handleClick"></button>
+</button>
+```
+
+### 3. v-model
+
+양방향 데이터 바인딩을 구현합니다.
+
+##### 역할:
+
+- 폼 입력과 데이터를 양방향으로 동기화
+- 입력 요소의 값과 Vue 데이터를 자동으로 연결
+- 다양한 입력 타입(text, checkbox, radio 등)지원
+
+```html
+<input v-model="message" />
+```
+
+### 4. v-if, v-else-if, v-else
+
+조건부 렌더링을 수행합니다.
+
+##### 역할:
+
+- 조건에 따라 DOM 요소를 생성/제거
+- 여러 조건 분기 처리
+- template 태그와 함께 그룹 렌더링 가능
+
+```html
+<div v-if="type === 'A'">A</div>
+<div v-else-if="type === 'B'">B</div>
+<div v-else>Not A/B</div>
+```
+
+### 5. v-show
+
+조건부로 요소를 표시/숨김 처리합니다.
+
+##### 역할:
+
+- display CSS 속성을 통한 가시성 제어
+- 초기 렌더링 비용이 높지만 토글 비용이 낮음
+
+```html
+<div v-show="isVisible"></div>
+```
+
+### 6. v-for
+
+배열이나 객체를 반복하여 렌더링합니다.
+
+##### 역할:
+
+- 데이터 collection을 반복하여 렌더링
+- 배열, 객체, 숫자 범위 반복 가능
+- key 속성을 통한 효율적인 리렌더링
+
+```html
+<div v-for="(item, index) in items" :key="item.id"></div>
+```
+
+### 7. v-text
+
+텍스트 콘텐츠를 업데이트합니다.
+
+##### 역할:
+
+- 요소의 텍스트 콘텐츠를 설정
+- `{{ }}` 문법의 대안
+
+```html
+<span v-text="msg"></span>
+```
+
+### 8. v-html
+
+HTML 콘텐츠를 삽입합니다.
+
+##### 역할:
+
+- raw HTML을 출력
+- XSS 취약점 주의 필요
+
+```html
+<div v-html="htmlContent"></div>
+```
+
+### 9. v-pre
+
+컴파일을 건너뜁니다.
+
+##### 역할:
+
+- Vue 컴파일을 건너뛰고 raw 텍스트 표시
+- 성능 최적화에 사용
+
+```html
+<span v-pre>{{ 이 부분은 컴파일되지 않음 }}</span>
+```
+
+### 10. v-cloak
+
+컴파일이 완료될 때까지 요소를 숨깁니다.
+
+##### 역할:
+
+- 컴파일 전 템플릿 깜빡임 방지
+- CSS와 함께 사용하여 초기 로딩 상태 제어
+
+```html
+<div v-cloak>{{ message }}</div>
+```
+
+### 11. v-once
+
+일회성 렌더링을 수행합니다.
+
+##### 역할:
+
+- 초기 렌더링 후 더 이상 업데이트하지 않음
+- 정적 콘텐츠 최적화에 사용
+
+```html
+<div v-once>{{ message }}</div>
+```
+
+### 12. v-slot
+
+명명된 슬롯이나 범위를 가진 슬롯을 정의합니다.
+
+##### 역할:
+
+- 컴포넌트의 슬롯 콘텐츠 전달
+- 이름 있는 슬롯과 스코프드 슬롯 구현
+- 컴포넌트 재사용성 향상
+
+```html
+<template v-slot:header="slotProps"></template>
+```
+
+## 디렉티브 사용 시 주의사항
+
+1. 성능 고려
+
+- v-if vs v-show 선택 시 토글 빈도 고려
+- v-for 사용 시 항상 key 속성 지정
+- v-once 사용으로 불필요한 재렌더링 방지
+
+2. 보안 고려
+
+- v-html 사용 시 XSS 공격 위험 주의
+- 사용자 입력 데이터 적절한 sanitize 필요
+
+3. 최적화 고려
+
+- 과도한 양방향 바인딩 지양
+- 큰 목록은 가상 스크롤링 고려
+- 조건부 렌더링 시 적절한 디렉티브 선택
+
+## 실전 활용 예시:
+
+```html
+<template>
+  <div class="user-list">
+    <!-- 조건부 렌더링 -->
+    <div v-if="loading" v-once>Loading template...</div>
+
+    <!-- 리스트 렌더링 -->
+    <template v-else>
+      <div
+        v-for="user in users"
+        :key="user.id"
+        :class="{ active: selectedId === user.id }"
+        @click="selectUser(user)"
+      >
+        <!-- 속성 바인딩 -->
+        <img :src="user.avatar" :alt="user.name" />
+
+        <!-- 양방향 바인딩 -->
+        <input v-model.trim="user.name" @input="updateUser(user)" />
+
+        <!-- 이벤트 처리 -->
+        <button @click.stop="deleteUser(user)" :disabled="isProcessing">
+          Delete
+        </button>
+      </div>
+    </template>
+  </div>
+</template>
+```
+
+디렉티브는 Vue.js의 핵심 기능으로, 이들을 적절히 조합하여 사용하면 동적이고 반응적인 UI를 효과적으로 구현할 수 있습니다.

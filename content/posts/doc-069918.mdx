@@ -1,0 +1,296 @@
+---
+title: "HTML 체크박스 사용법"
+date: 2025-03-12
+island: library
+room: frontend
+tags: []
+---
+웹 폼을 만들 때 체크박스는 사용자가 여러 옵션 중에서 선택할 수 있게 해주는 필수적인 요소입니다. 그런데 체크박스를 초기화하는 방법, 특히 `checked` 속성의 올바른 사용법에 대해 혼란이 있을 수 있습니다. 이 글에서는 HTML 체크박스를 올바르게 사용하는 방법과 `checked="on"` 및 `checked="off"`와 같은 접근법의 문제점에 대해 자세히 알아보겠습니다.
+
+## 체크박스 기본 사용법
+
+HTML에서 체크박스는 `<input type="checkbox">` 태그를 사용하여 만듭니다. 기본적인 체크박스 구문은 다음과 같습니다:
+
+```html
+<input type="checkbox" name="option" value="value">
+```
+
+체크박스의 주요 속성:
+
+- `name`: 폼 제출 시 서버로 전송되는 데이터의 이름
+- `value`: 체크박스가 선택되었을 때 서버로 전송되는 값
+- `checked`: 페이지 로드 시 체크박스가 선택된 상태로 표시될지 여부
+
+## `checked` 속성의 올바른 사용법
+
+HTML 명세에 따르면, `checked`는 **불리언 속성(boolean attribute)**입니다. 불리언 속성은 특별한 방식으로 작동합니다:
+
+1. 속성이 존재하면 true (켜짐)
+2. 속성이 없으면 false (꺼짐)
+
+올바른 `checked` 속성 사용법:
+
+```html
+<!-- 체크된 상태 (올바른 방법) -->
+<input type="checkbox" name="option1" value="value1" checked>
+
+<!-- HTML5에서는 이것도 유효함 -->
+<input type="checkbox" name="option2" value="value2" checked="checked">
+
+<!-- 체크되지 않은 상태 (올바른 방법) -->
+<input type="checkbox" name="option3" value="value3">
+```
+
+## `checked="on"` vs `checked="off"` 오해
+
+다음과 같은 코드를 볼 수 있습니다:
+
+```html
+<input type="checkbox" name="check" value="item1" checked="on">
+```
+
+그리고 일부 개발자들은 다음과 같이 체크박스를 해제하려고 시도합니다:
+
+```html
+<input type="checkbox" name="check" value="item1" checked="off">
+```
+> **WARNING**
+>
+> **이것은 올바른 HTML 사용법이 아닙니다!** 왜 그럴까요?
+>
+> 1. HTML 명세에서 `checked`는 불리언 속성입니다.
+> 2. 불리언 속성은 **존재 여부만**이 중요합니다.
+> 3. `checked="on"`, `checked="off"`, `checked="anything"` 모두 동일하게 처리됩니다 - 속성이 존재하므로 체크박스는 선택된 상태가 됩니다.
+>
+> 따라서 `checked="off"`로 설정해도 체크박스는 여전히 선택된 상태로 표시됩니다!
+
+
+## 올바른 체크박스 초기화 방법
+
+체크박스를 초기화하는 올바른 방법:
+
+```html
+<!-- 체크된 상태로 초기화 -->
+<input type="checkbox" name="subscribe" value="yes" checked>
+
+<!-- 체크되지 않은 상태로 초기화 -->
+<input type="checkbox" name="promotions" value="yes">
+```
+
+체크박스를 체크되지 않은 상태로 만들려면 `checked` 속성을 완전히 제거해야 합니다. `checked="false"` 또는 `checked="off"`로 설정하는 것은 작동하지 않습니다.
+
+## 체크박스 상태 관리를 위한 자바스크립트
+
+자바스크립트를 사용해 체크박스 상태를 동적으로 변경할 수 있습니다:
+
+```javascript
+// 체크박스 요소 가져오기
+const checkbox = document.getElementById('myCheckbox');
+
+// 체크 상태 설정
+checkbox.checked = true;  // 체크됨
+checkbox.checked = false; // 체크 해제
+
+// 체크 상태 확인
+if (checkbox.checked) {
+  console.log('체크박스가 선택되었습니다');
+} else {
+  console.log('체크박스가 선택되지 않았습니다');
+}
+
+// 체크 상태 토글
+checkbox.checked = !checkbox.checked;
+```
+
+자바스크립트에서는 `checked` 속성을 불리언 값으로 처리하므로, `true` 또는 `false`로 설정할 수 있습니다.
+
+## 접근성을 고려한 체크박스 구현
+
+접근성을 고려한 체크박스를 구현하려면 `<label>` 요소를 반드시 사용해야 합니다:
+
+```html
+<!-- 방법 1: label 내부에 체크박스 포함 -->
+<label>
+  <input type="checkbox" name="agree" value="yes">
+  이용약관에 동의합니다
+</label>
+
+<!-- 방법 2: label의 for 속성 사용 -->
+<input type="checkbox" id="terms" name="agree" value="yes">
+<label for="terms">이용약관에 동의합니다</label>
+```
+
+레이블을 사용하면:
+
+1. 체크박스의 목적을 명확히 알 수 있습니다
+2. 레이블을 클릭해도 체크박스가 토글됩니다
+3. 스크린 리더 사용자가 체크박스의 용도를 이해할 수 있습니다
+
+## 실전 체크박스 예제
+
+### 기본 체크박스 그룹
+
+```html
+<fieldset>
+  <legend>좋아하는 과일을 선택하세요:</legend>
+  
+  <div>
+    <input type="checkbox" id="apple" name="fruit" value="apple" checked>
+    <label for="apple">사과</label>
+  </div>
+  
+  <div>
+    <input type="checkbox" id="banana" name="fruit" value="banana">
+    <label for="banana">바나나</label>
+  </div>
+  
+  <div>
+    <input type="checkbox" id="orange" name="fruit" value="orange">
+    <label for="orange">오렌지</label>
+  </div>
+</fieldset>
+```
+
+### 모두 선택/해제 기능이 있는 체크박스
+
+```html
+<div>
+  <input type="checkbox" id="selectAll" name="selectAll">
+  <label for="selectAll"><strong>모두 선택</strong></label>
+</div>
+
+<div>
+  <input type="checkbox" id="option1" name="options" value="option1" class="option">
+  <label for="option1">옵션 1</label>
+</div>
+
+<div>
+  <input type="checkbox" id="option2" name="options" value="option2" class="option">
+  <label for="option2">옵션 2</label>
+</div>
+
+<div>
+  <input type="checkbox" id="option3" name="options" value="option3" class="option">
+  <label for="option3">옵션 3</label>
+</div>
+
+<script>
+  const selectAllCheckbox = document.getElementById('selectAll');
+  const optionCheckboxes = document.querySelectorAll('.option');
+  
+  // '모두 선택' 체크박스 이벤트 리스너
+  selectAllCheckbox.addEventListener('change', function() {
+    const isChecked = this.checked;
+    
+    // 모든 옵션 체크박스의 상태 변경
+    optionCheckboxes.forEach(checkbox => {
+      checkbox.checked = isChecked;
+    });
+  });
+  
+  // 개별 체크박스 변경 감지
+  optionCheckboxes.forEach(checkbox => {
+    checkbox.addEventListener('change', function() {
+      // 모든 체크박스가 선택되었는지 확인
+      const allChecked = Array.from(optionCheckboxes).every(cb => cb.checked);
+      
+      // '모두 선택' 체크박스 상태 업데이트
+      selectAllCheckbox.checked = allChecked;
+    });
+  });
+</script>
+```
+
+### 스타일링된 커스텀 체크박스
+
+```html
+<style>
+  /* 원래 체크박스 숨기기 */
+  .custom-checkbox {
+    position: absolute;
+    opacity: 0;
+    cursor: pointer;
+    height: 0;
+    width: 0;
+  }
+  
+  /* 커스텀 체크박스 컨테이너 */
+  .checkbox-container {
+    display: block;
+    position: relative;
+    padding-left: 35px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    font-size: 16px;
+    user-select: none;
+  }
+  
+  /* 커스텀 체크박스 */
+  .checkmark {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 25px;
+    width: 25px;
+    background-color: #eee;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+  }
+  
+  /* 호버 효과 */
+  .checkbox-container:hover .checkmark {
+    background-color: #ccc;
+  }
+  
+  /* 선택된 상태 */
+  .custom-checkbox:checked ~ .checkmark {
+    background-color: #2196F3;
+  }
+  
+  /* 체크 표시 생성 */
+  .checkmark:after {
+    content: "";
+    position: absolute;
+    display: none;
+  }
+  
+  /* 체크 표시 스타일 */
+  .custom-checkbox:checked ~ .checkmark:after {
+    display: block;
+    left: 9px;
+    top: 5px;
+    width: 5px;
+    height: 10px;
+    border: solid white;
+    border-width: 0 3px 3px 0;
+    transform: rotate(45deg);
+  }
+</style>
+
+<label class="checkbox-container">커스텀 체크박스 예제
+  <input type="checkbox" class="custom-checkbox" checked>
+  <span class="checkmark"></span>
+</label>
+```
+
+## 결론
+
+HTML 체크박스를 올바르게 사용하려면:
+
+1. **불리언 속성으로 `checked` 이해하기**: 속성이 있으면 체크됨, 없으면 체크 안 됨
+2. **`checked="on"` 또는 `checked="off"` 사용 피하기**: 이는 혼란을 일으키며 `checked="off"`는 예상대로 작동하지 않음
+3. **체크박스 해제하기**: `checked` 속성을 완전히 제거해야 함
+4. **자바스크립트에서는 `element.checked = true/false` 사용하기**
+5. **접근성을 위해 항상 `<label>` 사용하기**
+
+체크박스는 간단해 보이지만, 올바르게 사용하는 것이 중요합니다. 특히 불리언 속성의 특성을 이해하면 `checked="on"` 또는 `checked="off"`와 같은 일반적인 오해를 피할 수 있습니다.
+
+다음에는 라디오 버튼이나 선택 목록과 같은 다른 폼 요소들에 대해서도 알아보겠습니다!
+
+---
+
+### 참고 자료
+
+- [HTML Living Standard - 체크박스 명세](https://html.spec.whatwg.org/multipage/input.html#checkbox-state-\(type=checkbox\))
+- [MDN Web Docs - 불리언 속성](https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes#boolean_attributes)
+- [W3C - 접근성 지침](https://www.w3.org/WAI/tutorials/forms/checkbox/)

@@ -1,0 +1,215 @@
+---
+title: "모던 CSS 솔루션 비교"
+date: 2025-02-14
+island: library
+room: frontend
+tags: []
+---
+최근 몇 년간 프론트엔드 개발에서 CSS 작성 방식은 끊임없이 진화해왔습니다. 오늘은 최신 CSS 솔루션들의 특징과 차이점을 자세히 살펴보겠습니다.
+
+## 목차
+1. [각 솔루션 소개](#각-솔루션-소개)
+2. [코드 예시로 보는 차이점](#코드-예시로-보는-차이점)
+3. [성능 비교](#성능-비교)
+4. [사용 시나리오](#사용-시나리오)
+5. [결론](#결론)
+
+## 각 솔루션 소개
+
+### 1. Linaria (2019)
+Linaria는 제로 런타임 CSS-in-JS 솔루션으로, 빌드 시점에 실제 CSS를 추출합니다.
+
+**주요 특징:**
+- 런타임 오버헤드가 없음
+- CSS-in-JS의 장점을 유지
+- TypeScript 지원
+- 동적 스타일링 가능
+
+**장점:**
+- 뛰어난 개발자 경험
+- 런타임 성능이 우수
+- 기존 CSS-in-JS 개발자들의 쉬운 적응
+
+**단점:**
+- 빌드 설정이 다소 복잡
+- 일부 동적 기능에 제약 존재
+
+### 2. Vanilla Extract (2021)
+TypeScript 기반의 CSS-in-TS 솔루션으로, 강력한 타입 시스템을 제공합니다.
+
+**주요 특징:**
+- TypeScript로 CSS 작성
+- 정적 CSS 생성
+- 강력한 타입 안정성
+- 테마 시스템 내장
+
+**장점:**
+- 완벽한 타입 지원
+- 뛰어난 개발자 경험
+- 런타임 오버헤드 없음
+
+**단점:**
+- 러닝 커브가 있음
+- TypeScript 필수
+
+### 3. UnoCSS (2022)
+차세대 원자적 CSS 엔진으로, Tailwind CSS보다 더 가볍고 빠릅니다.
+
+**주요 특징:**
+- atomic first 접근
+- 높은 커스터마이징 자유도
+- 매우 빠른 빌드 속도
+- 프리셋 시스템
+
+**장점:**
+- 극도로 작은 번들 사이즈
+- 뛰어난 성능
+- 유연한 확장성
+
+**단점:**
+- HTML이 복잡해질 수 있음
+- 새로운 패러다임 적응 필요
+
+### 4. StyleX (2023)
+Meta에서 개발한 최신 CSS-in-JS 솔루션입니다.
+
+**주요 특징:**
+- 컴파일 타임 최적화
+- 타입 안정성
+- React 통합
+- 자동 코드 분할
+
+**장점:**
+- 높은 성능
+- 작은 번들 사이즈
+- 뛰어난 React 통합
+
+**단점:**
+- 비교적 새로운 기술
+- Meta 생태계 의존성
+
+## 코드 예시로 보는 차이점
+
+### Linaria 예시
+```javascript
+import { styled } from '@linaria/react';
+
+export const Button = styled.button`
+  padding: 10px 20px;
+  background-color: ${props => props.primary ? 'blue' : 'gray'};
+  color: white;
+  border: none;
+  border-radius: 4px;
+  
+  &:hover {
+    opacity: 0.8;
+  }
+`;
+```
+
+### Vanilla Extract 예시
+```typescript
+import { style, createTheme } from '@vanilla-extract/css';
+
+export const [themeClass, vars] = createTheme({
+  colors: {
+    primary: 'blue',
+    secondary: 'gray'
+  }
+});
+
+export const button = style({
+  padding: '10px 20px',
+  backgroundColor: vars.colors.primary,
+  color: 'white',
+  border: 'none',
+  borderRadius: '4px',
+  ':hover': {
+    opacity: 0.8
+  }
+});
+```
+
+### UnoCSS 예시
+```html
+<button class="px-5 py-2 bg-blue-500 text-white rounded hover:opacity-80">
+  Click me
+</button>
+```
+
+### StyleX 예시
+```javascript
+import stylex from '@stylexjs/stylex';
+
+const styles = stylex.create({
+  button: {
+    padding: '10px 20px',
+    backgroundColor: 'blue',
+    color: 'white',
+    borderRadius: 4,
+    border: 'none',
+    ':hover': {
+      opacity: 0.8,
+    },
+  }
+});
+```
+
+## 성능 비교
+
+### 번들 크기
+6. UnoCSS: 매우 작음 (필요한 유틸리티만 포함)
+7. StyleX: 작음
+8. Vanilla Extract: 중간
+9. Linaria: 중간
+
+### 빌드 속도
+10. UnoCSS: 매우 빠름
+11. StyleX: 빠름
+12. Vanilla Extract: 보통
+13. Linaria: 보통
+
+### 런타임 성능
+모든 솔루션이 제로 또는 니어 제로 런타임을 지향하여 우수한 성능을 보여줍니다.
+
+## 사용 시나리오
+
+### Linaria 적합한 경우
+- CSS-in-JS에 익숙한 팀
+- 동적 스타일링이 많은 프로젝트
+- React 프로젝트
+
+### Vanilla Extract 적합한 경우
+- TypeScript를 적극 활용하는 팀
+- 대규모 엔터프라이즈 프로젝트
+- 테마 시스템이 중요한 프로젝트
+
+### UnoCSS 적합한 경우
+- 빠른 개발이 필요한 프로젝트
+- 성능이 최우선인 경우
+- 가벼운 웹사이트/앱
+
+### StyleX 적합한 경우
+- React 기반 대규모 프로젝트
+- 성능과 개발자 경험 모두 중요한 경우
+- Meta 생태계 활용 프로젝트
+
+## 결론
+
+각 CSS 솔루션은 저마다의 강점이 있습니다:
+
+- **Linaria**: CSS-in-JS의 장점과 제로 런타임의 이점을 결합
+- **Vanilla Extract**: 타입 안정성과 테마 시스템이 뛰어남
+- **UnoCSS**: 최고의 성능과 유연성 제공
+- **StyleX**: React와의 뛰어난 통합과 Meta의 검증된 기술
+
+프로젝트의 요구사항, 팀의 기술 스택, 개발 문화에 따라 적절한 솔루션을 선택하는 것이 중요합니다. 특히 StyleX가 최근 주목받고 있는 이유는 Meta의 대규모 프로덕션 환경에서의 검증과 React 생태계와의 뛰어난 통합성 때문입니다.
+
+선택 시 고려해야 할 핵심 요소:
+14. 팀의 기술적 배경과 선호도
+15. 프로젝트의 규모와 복잡도
+16. 성능 요구사항
+17. 유지보수 용이성
+18. 생태계와 커뮤니티 지원
+
+각 솔루션은 계속해서 발전하고 있으며, 웹 개발 생태계의 변화에 따라 새로운 기능과 개선사항이 추가될 것으로 기대됩니다.

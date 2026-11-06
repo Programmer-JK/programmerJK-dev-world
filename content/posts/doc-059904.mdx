@@ -1,0 +1,136 @@
+---
+title: "DELETE Are Difficult"
+summary: "PostgreSQL에서 DELETE 작업의 내부 프로세스, 성능 영향, 최적화 전략에 대한 심층 가이드"
+date: 2025-01-05
+island: library
+room: backend
+tags: ["postgresql", "database-operations", "performance-optimization", "sql-management"]
+---
+사이트 원본) https://notso.boringsql.com/posts/deletes-are-difficult/
+
+## 들어가며
+
+SELECT나 INSERT만큼이나 중요한 데이터베이스 작업이지만, 종종 간과되는 DELETE 작업에 대해 알아보겠습니다. 단순해 보이는 DELETE 명령어 하나가 때로는 전체 시스템을 마비시킬 수 있다는 사실, 알고 계셨나요?
+
+>**What is VACUUM ? :**  [글 바로가기](/posts/doc-059903)  
+>   PostgreSQL에서 VACUUM은 DELETE나 UPDATE로 인해 발생한 죽은 데이터를 정리하고 재사용 가능하게 만드는 청소부 같은 작업으로, 데이터베이스의 성능과 안정성을 유지하는 데 필수적입니다.
+
+## DELETE 작업의 숨겨진 복잡성
+
+### 1. DELETE 작업의 실제 프로세스
+
+DELETE 명령어가 실행되면 다음과 같은 복잡한 단계들이 순차적으로 발생합니다:
+
+1. **행 식별 (Row Identification)**
+   - 현재 트랜잭션에서 보이는 행들을 식별
+   - MVCC(다중 버전 동시성 제어) 고려
+   - 잠금 상태 확인
+
+2. **잠금 처리 (Lock Acquisition)**
+   - 대상 행에 대한 배타적 잠금 획득
+   - 다른 작업과의 충돌 방지
+
+3. **트리거 및 연쇄 작업**
+   - BEFORE DELETE 트리거 실행
+   - 연관 테이블의 CASCADE 작업 수행
+   - AFTER DELETE 트리거 실행
+
+4. **데이터 처리**
+   - 행을 논리적 삭제 상태로 표시
+   - 인덱스 항목 업데이트
+   - WAL(Write-Ahead Log) 기록
+
+### 2. 물리적 삭제와 AUTOVACUUM
+
+흥미로운 점은 DELETE 명령어가 실행되어도 데이터가 즉시 물리적으로 제거되지 않는다는 것입니다. 이는 AUTOVACUUM 프로세스가 담당하며, 다음과 같은 작업을 수행합니다:
+
+- 더 이상 필요하지 않은 튜플 제거
+- 빈 공간 재사용 표시
+- 테이블 통계 업데이트
+- 인덱스 정리
+- TOAST 테이블 처리
+
+## 성능 영향과 최적화 전략
+
+### 1. 대규모 DELETE 작업의 영향
+
+```sql
+-- 주의: 프로덕션 환경에서 이런 방식은 위험할 수 있습니다
+DELETE FROM large_table WHERE created_at < '2023-01-01';
+```
+
+이러한 단순한 쿼리도 다음과 같은 문제를 일으킬 수 있습니다:
+- 과도한 WAL 생성
+- 리소스 경합
+- 복제 지연
+- 블로트(bloat) 발생
+
+### 2. 효과적인 DELETE 전략
+
+#### 배치 처리 사용
+```sql
+DELETE FROM large_table
+WHERE ctid IN (
+    SELECT ctid FROM large_table
+    WHERE created_at < '2023-01-01'
+    LIMIT 1000
+);
+```
+
+#### 파티셔닝 활용
+```sql
+-- 파티션 테이블 생성 예시
+CREATE TABLE events (
+    id serial,
+    created_at timestamp,
+    data jsonb
+) PARTITION BY RANGE (created_at);
+```
+
+## 실전 팁과 권장사항
+
+1. **배치 처리 도입**
+   - 대량 삭제 시 작은 단위로 분할
+   - 시스템 부하 분산
+   - 다른 트랜잭션 영향 최소화
+
+2. **AUTOVACUUM 관리**
+   - 적절한 VACUUM 설정 유지
+   - 정기적인 모니터링
+   - 필요시 수동 VACUUM 실행
+
+3. **파티셔닝 전략**
+   - 시간 기반 데이터는 파티셔닝 고려
+   - 파티션 단위 삭제로 효율성 확보
+   - 유지보수 용이성 증가
+
+## 마치며
+
+DELETE 작업은 단순해 보이지만, 실제로는 매우 복잡한 데이터베이스 작업입니다. 특히 대규모 프로덕션 환경에서는 신중한 접근이 필요합니다. 적절한 전략과 최적화를 통해 안정적이고 효율적인 데이터베이스 운영이 가능합니다.
+
+네, 요약을 추가하여 더 명확하게 정리하겠습니다. 글의 마지막 부분에 다음과 같이 요약을 추가하면 좋을 것 같습니다:
+
+## 요약
+
+### DELETE 작업의 핵심 포인트
+1. **작업의 복잡성**
+   - 단순한 명령어지만 복잡한 내부 프로세스 수반
+   - 즉각적인 물리적 삭제가 아닌 논리적 삭제 수행
+   - 다양한 시스템 리소스 사용
+
+2. **성능 영향**
+   - 대규모 DELETE 시 시스템 부하 증가
+   - 블로트 현상으로 인한 성능 저하 가능성
+   - 복제 환경에서 추가적인 지연 발생
+
+3. **최적화 전략**
+   - 배치 처리를 통한 부하 분산
+   - AUTOVACUUM 설정 최적화
+   - 파티셔닝을 통한 효율적인 데이터 관리
+
+### 체크리스트
+- [ ] DELETE 작업 규모 파악
+- [ ] 배치 처리 전략 수립
+- [ ] AUTOVACUUM 설정 검토
+- [ ] 모니터링 계획 수립
+- [ ] 백업 및 복구 계획 확인

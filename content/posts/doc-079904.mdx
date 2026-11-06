@@ -1,0 +1,110 @@
+---
+title: "v-bind vs v-model"
+summary: "Vue.js의 단방향 데이터 바인딩(v-bind)과 양방향 데이터 바인딩(v-model)의 특징, 내부 동작 방식 및 활용 사례 분석"
+date: 2024-11-13
+island: library
+room: frontend
+tags: ["Vue.js", "frontend", "data-binding", "directives"]
+---
+## 1. 데이터 흐름
+### v-bind
+- 단방향 데이터 바인딩
+- 컴포넌트/데이터 → 템플릿(화면) 방향으로만 동작
+```html
+<input :value="message"> <!-- message가 변경되면 input 값이 변경됨 -->
+<!-- 하지만 input 값을 변경해도 message는 변경되지 않음 -->
+```
+
+### v-model
+- 양방향 데이터 바인딩
+- 컴포넌트/데이터 ↔ 템플릿(화면) 양쪽으로 동작
+```html
+<input v-model="message"> <!-- message와 input 값이 서로 동기화됨 -->
+```
+
+## 2. 내부 동작 방식
+v-model은 실제로 다음과 같은 v-bind와 v-on의 조합으로 동작합니다:
+```html
+<!-- v-model의 내부 동작 -->
+<input
+  v-model="message"
+>
+
+<!-- 위 코드는 다음과 동일 -->
+<input
+  :value="message"
+  @input="message = $event.target.value"
+>
+```
+
+## 3. 사용 예시와 차이점
+```html
+<!-- v-bind 사용 예시 -->
+<img :src="imageUrl">         <!-- 이미지 소스 바인딩 -->
+<div :class="className">      <!-- 클래스 바인딩 -->
+<button :disabled="isLoading"> <!-- 속성 바인딩 -->
+
+<!-- v-model 사용 예시 -->
+<input v-model="username">    <!-- 입력 필드 -->
+<textarea v-model="content">  <!-- 텍스트 영역 -->
+<select v-model="selected">   <!-- 선택 상자 -->
+```
+
+## 4. 각각 언제 사용하나요?
+
+### v-bind 사용
+- HTML 속성을 동적으로 설정할 때
+- 컴포넌트의 props를 전달할 때
+- CSS 클래스나 스타일을 동적으로 바인딩할 때
+```html
+<div :class="{ active: isActive }">
+<img :src="imageUrl">
+<CustomComponent :prop-name="propValue">
+```
+
+### v-model 사용
+- 폼 입력 요소와 데이터를 동기화할 때
+- 사용자 입력을 직접 데이터에 반영해야 할 때
+```html
+<input v-model="username">
+<select v-model="country">
+<textarea v-model="description">
+```
+
+## 5. 실제 사용 예시
+```html
+<template>
+  <div class="form-group">
+    <!-- v-bind 사용 -->
+    <img :src="profileImage">
+    <button :disabled="isSubmitting">
+      {{ isSubmitting ? 'Submitting...' : 'Submit' }}
+    </button>
+
+    <!-- v-model 사용 -->
+    <input 
+      v-model="formData.name"
+      :class="{ 'is-invalid': errors.name }" <!-- v-bind로 클래스 조건부 적용 -->
+    >
+    <select v-model="formData.country">
+      <option v-for="country in countries" 
+              :value="country.code" <!-- v-bind로 동적 값 설정 -->
+              :key="country.code">
+        {{ country.name }}
+      </option>
+    </select>
+  </div>
+</template>
+```
+
+## 6. 주의사항
+- v-model은 폼 요소나 사용자 입력 컴포넌트에만 사용
+- v-bind는 모든 HTML 속성이나 컴포넌트 props에 사용 가능
+- v-model은 .lazy, .number, .trim 같은 수식어 사용 가능
+```html
+<input v-model.lazy="message">    <!-- change 이벤트 후 동기화 -->
+<input v-model.number="age">      <!-- 숫자로 형변환 -->
+<input v-model.trim="message">    <!-- 공백 제거 -->
+```
+
+결론적으로, v-bind는 단방향 데이터 바인딩을 위한 범용적인 디렉티브이고, v-model은 폼 입력 요소에 특화된 양방향 데이터 바인딩 디렉티브입니다.

@@ -1,0 +1,136 @@
+---
+title: "JavaScript에서 JSON.stringify()와 localStorage의 문자열 처리 차이 이해하기"
+date: 2025-04-21
+island: library
+room: frontend
+tags: ["JavaScript", "localStorage", "JSON"]
+---
+JavaScript 개발을 하다 보면 가끔 문자열 처리와 관련된 당혹스러운 현상을 마주치게 됩니다. 특히 `JSON.stringify()`로 직렬화한 문자열을 localStorage에 저장했을 때, 개발자 도구에서 보는 값이 원래와 다르게 보이는 경우가 있습니다. 오늘은 이런 현상이 발생하는 이유와 그 원리에 대해 자세히 알아보겠습니다.
+
+## 문제 상황
+
+다음과 같은 코드를 생각해봅시다:
+
+```javascript
+// 따옴표(")가 포함된 객체
+const dashboard = { 
+  content: '<div id="example"></div>' 
+};
+
+// JSON으로 직렬화
+const serialized = JSON.stringify(dashboard);
+console.log(serialized); 
+// 콘솔 출력: {"content":"<div id=\"example\"></div>"}
+
+// localStorage에 저장
+localStorage.setItem('dashboard', serialized);
+
+// 개발자 도구에서 localStorage 확인 시:
+// {"content":"<div id=\"example\"></div>"}로 보임
+```
+
+여기서 주목할 점은 다음과 같습니다:
+
+1. 원본 문자열에는 따옴표(`"`)가 있음
+2. `JSON.stringify()` 후 콘솔에서는 `\\"` 형태로 보임
+3. localStorage에 저장 후 개발자 도구에서는 `\"` 형태로 보임
+
+왜 이런 차이가 생기는 걸까요?
+
+## 문자열 이스케이프와 표현 방식의 이해
+
+### 1. 원본 문자열
+
+HTML 태그의 속성 값으로 따옴표(`"`)를 사용했습니다:
+
+```html
+<div id="example"></div>
+```
+
+이 문자열은 JavaScript 객체의 속성 값으로 저장되어 있습니다.
+
+### 2. JSON.stringify() 직렬화 과정
+
+`JSON.stringify()`는 JavaScript 객체를 JSON 문자열로 변환합니다. 이 과정에서 특수 문자들이 이스케이프 처리됩니다:
+
+- 따옴표(`"`)는 JSON 문자열의 구분자로 사용되므로 `\"`로 이스케이프됨
+- 백슬래시(`\`)도 특수 문자이므로 `\\`로 이스케이프됨
+
+따라서 HTML의 따옴표(`"`)는 `\"`로 이스케이프되고, 이것이 다시 JSON 문자열로 직렬화되면서 백슬래시(`\`)가 `\\`로 이스케이프됩니다. 그 결과:
+
+```
+" → \" → \\"
+```
+
+즉, 원래 따옴표 하나가 콘솔에서는 백슬래시 두 개와 따옴표(`\\"`)로 보이게 됩니다.
+
+### 3. localStorage에 저장된 값 확인
+
+localStorage에 문자열을 저장한 후 개발자 도구에서 확인하면 `\"`로 보입니다. 이유는 다음과 같습니다:
+
+- localStorage는 문자열을 그대로 저장합니다.
+- 개발자 도구는 localStorage 값을 표시할 때 **바깥쪽 JSON 구조만 해석**합니다.
+- 내부 문자열의 이스케이프 문자(`\"`)는 그대로 표시합니다.
+
+그래서 개발자 도구에서는 `{"content":"<div id=\"example\"></div>"}`로 보이게 됩니다.
+
+## 원리: 다중 레이어의 파싱과 표현
+
+이 현상의 근본 원인은 **여러 단계(레이어)의 문자열 해석**이 일어나기 때문입니다:
+
+1. **JavaScript 엔진 레이어**: 소스 코드에서 문자열 리터럴을 해석
+2. **JSON 직렬화 레이어**: 객체를 JSON 문자열로 변환
+3. **표시 레이어**: 콘솔, 개발자 도구 등이 값을 표시하는 방식
+
+각 레이어는 문자열을 다르게 처리하고 표현합니다:
+
+|레이어|따옴표 표현|설명|
+|---|---|---|
+|원본 객체|`"`|JavaScript 메모리에 있는 실제 문자|
+|JSON 직렬화 후|`\\"`|콘솔에 표시되는 형태 (이중 이스케이프)|
+|localStorage 뷰어|`\"`|개발자 도구에 표시되는 형태 (부분 해석)|
+
+## 다양한 예시
+
+더 복잡한 예시를 통해 이 현상을 살펴보겠습니다:
+
+```javascript
+// 다양한 특수문자가 포함된 객체
+const complexObj = {
+  html: '<div id="main" data-value="test"></div>',
+  path: 'C:\\Program Files\\App',
+  quote: 'He said, "Hello!"'
+};
+
+// JSON으로 직렬화
+const serialized = JSON.stringify(complexObj);
+console.log(serialized);
+// 콘솔에 표시되는 형태는 모든 특수문자가 이중 이스케이프됨
+
+// localStorage에 저장
+localStorage.setItem('complex', serialized);
+// 개발자 도구에서는 부분적으로 해석된 형태로 표시됨
+```
+
+## 실용적인 해결책과 이해
+
+이 현상은 버그가 아니라 문자열 표현 방식의 차이입니다. 실제 데이터는 정확히 저장되고 있으며, `JSON.parse()`로 다시 파싱하면 원래 객체가 정확히 복원됩니다:
+
+```javascript
+// localStorage에서 가져오기
+const retrieved = localStorage.getItem('dashboard');
+const parsedObj = JSON.parse(retrieved);
+console.log(parsedObj.content); // 출력: <div id="example"></div>
+```
+
+### 개발 시 주의사항
+
+1. **직접 비교 지양**: 직렬화된 문자열을 직접 비교하지 말고, 파싱 후 객체 상태에서 비교하세요.
+2. **일관된 접근**: localStorage 사용 시 항상 `JSON.stringify()`와 `JSON.parse()`를 쌍으로 사용하세요.
+3. **디버깅 시 유의**: 콘솔과 개발자 도구의 표시 방식 차이를 이해하고 디버깅하세요.
+
+## 결론
+
+JavaScript에서 문자열 처리와 표현의 차이를 이해하는 것은 웹 개발에서 중요한 부분입니다. `JSON.stringify()`와 localStorage 사용 시 발생하는 문자열 표현 차이는 실제 데이터의 변경이 아니라 각 도구와 환경이 문자열을 표시하는 방식의 차이입니다.
+
+이러한 이해를 바탕으로 문자열 처리와 관련된 혼란을 줄이고, 더 효율적인 개발을 할 수 있습니다. 문자열 처리는 단순해 보이지만, 다양한 레이어와 컨텍스트에서 다르게 해석될 수 있다는 점을 항상 기억하세요.

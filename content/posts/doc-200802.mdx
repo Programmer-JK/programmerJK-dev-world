@@ -1,0 +1,114 @@
+---
+title: "글자 출력"
+date: 2025-02-07
+island: library
+room: algo
+tags: []
+---
+[링크](https://softeer.ai/practice/9660)
+
+```js
+const letter = {
+    'H' : [
+        '##  ##',
+        '##  ##',
+        '##  ##',
+        '######',
+        '##  ##',
+        '##  ##',
+        '##  ##',
+    ],
+    'A' : [
+        '  ##  ',
+        ' #### ',
+        '##  ##',
+        '######',
+        '##  ##',
+        '##  ##',
+        '##  ##',
+    ],
+    'P' : [
+        '##### ',
+        '##  ##',
+        '##  ##',
+        '##### ',
+        '##    ',
+        '##    ',
+        '##    ',
+    ],
+    'Y' : [
+        '##  ##',
+        '##  ##',
+        '##  ##',
+        ' #### ',
+        '  ##  ',
+        '  ##  ',
+        '  ##  ',
+    ],
+    'X' : [
+        '##  ##',
+        '##  ##',
+        ' #### ',
+        '  ##  ',
+        ' #### ',
+        '##  ##',
+        '##  ##',
+    ],
+    '-' : [
+        '      ',
+        '      ',
+        '      ',
+        '######',
+        '      ',
+        '      ',
+        '      ',
+    ],
+    'M' : [
+        '##   ##',
+        '### ###',
+        '#######',
+        '## # ##',
+        '##   ##',
+        '##   ##',
+        '##   ##',
+    ],
+    'S' : [
+        ' #### ',
+        '##  ##',
+        '##',
+        ' ####',
+        '    ##',
+        '##  ##',
+        ' ####'
+    ],
+    ' ' : [
+        '      ',
+        '      ',
+        '      ',
+        '      ',
+        '      ',
+        '      ',
+        '      ',
+    ]
+}
+
+function printText(text) {
+    for (let line = 0; line < 7; line++) {
+        let currentLine = '';
+        // For each character in the text
+        for (let char of text) {
+            if(char === 'S') {
+                currentLine += (letter[char] || letter[' '])[line];
+            }
+            else if(letter[char][line].length === 7) {
+                currentLine += (letter[char] || letter[' '])[line] + '  ';
+            } else {
+                
+            currentLine += (letter[char] || letter[' '])[line] + '   ';
+            }
+        }
+        console.log(currentLine);
+    }
+}
+printText("HAPPY X-MAS")
+```

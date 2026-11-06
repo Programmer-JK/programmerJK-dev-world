@@ -1,0 +1,27 @@
+---
+title: "멀쩡한 사각형의 갯수 구하기"
+date: 2024-12-26
+island: library
+room: algo
+tags: []
+---
+## 문제
+https://school.programmers.co.kr/learn/courses/30/lessons/62048
+
+## 풀이
+```js
+function gcd(a, b) {
+    const mod = a%b;
+    if (mod === 0) {
+        return b;
+    }
+    return gcd(b, mod);
+}
+
+function solution(w, h) {
+    var answer = 1;
+    if (w == 1 || h == 1) return 0;
+    const gcdVal = gcd(w,h);
+    return w*h - (w+h-gcdVal)
+}
+```

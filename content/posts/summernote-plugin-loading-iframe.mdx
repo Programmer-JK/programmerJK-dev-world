@@ -1,0 +1,146 @@
+---
+title: "Summernote 플러그인이 안 붙을 때 — iframe과 로딩 순서"
+summary: "직접 만든 플러그인 6개가 모두 'summernote를 찾지 못함'. 원인은 로딩 순서가 아니라 가드 조건이었다. 그리고 iframe 안 에디터 크기 맞추기."
+date: 2026-09-09
+island: library
+room: frontend
+project: finance-orgn
+tags: ["Summernote", "jQuery", "iframe", "JavaScript", "에디터"]
+---
+
+표와 이미지를 넣고 슬래시 명령을 쓰는 에디터가 필요했다. 폐쇄망이라 새 라이브러리(editor.js) 반입 대신 이미 이식된 Summernote에 직접 만든 플러그인 6개(고정 툴바, 표, 이미지, 슬래시, 드롭다운, 도움말)를 붙이기로 했다. 이미지 크기 편집 때문에 0.9.1로 올렸다.
+
+구조는 이렇다: **프레임워크(iframe) → Summernote 0.9.1 → 플러그인 6개 → 편집/조회 전환**.
+
+가장 오래 붙잡은 문제는 플러그인 6개가 각자 "summernote를 찾지 못함"을 내는 것이었다.
+
+## 배경 지식
+
+### jQuery 플러그인 구조
+
+- `$.fn`은 jQuery 객체의 프로토타입이다. `$.fn.summernote`가 등록되면 `$('#x').summernote()`를 부를 수 있다. → **라이브러리 로드 확인은 `$.fn.summernote`.**
+- `$.summernote`는 정적 네임스페이스(옵션·UI·플러그인 저장소)다. 이 환경에서는 **에디터를 한 번 초기화한 뒤에** 생겼다.
+- 플러그인은 `$.summernote.plugins`에 등록되고 에디터가 생성될 때 읽힌다. 에디터 생성 전에 등록돼 있어야 툴바에 나온다.
+
+### 스크립트 로딩 순서
+
+- HTML에 적힌 일반 `<script src>`는 적힌 순서대로 받아 실행된다.
+- JS로 만든 `script` 요소는 기본 비동기다. 끝나는 순서가 보장되지 않으므로 `onload`/`onerror`로 완료를 감지한다.
+- `$(document).ready`는 DOM 파싱 완료 시점일 뿐, 나중에 추가된 스크립트 로드는 기다리지 않는다.
+
+### iframe과 전역 범위
+
+- iframe마다 별도 `window`·`document`·jQuery가 있다. 부모의 `$`로는 iframe 안 요소와 플러그인이 안 보인다.
+- 부모가 `iframe.contentWindow.함수()`로 부르려면 함수가 iframe의 **전역**이어야 한다. `$(function(){ … })` 안에서 선언하면 지역 함수다.
+- 같은 출처(origin)일 때만 서로 접근할 수 있다.
+
+## 진단 순서
+
+1. 404인가? → 아니었다.
+2. 로드 순서인가? → 바꿔도 같았다.
+3. jQuery가 두 번 로드됐나?
+4. iframe 컨텍스트 문제인가?
+5. **가드 조건인가?** ← 원인
+
+```javascript
+console.log(window.jQuery, $.summernote, $ === window.jQuery);   // 로드 · 중복
+console.log($.fn.jquery, window.jQuery.fn.jquery);
+// 콘솔 컨텍스트(top 드롭다운)를 iframe으로 바꾼 뒤
+console.log(!!$.summernote, !!$.fn.summernote);
+console.log($('.note-editor').length);   // 1이면 이미 초기화됨 → 플러그인 버튼 안 보임
+```
+
+- `$`와 `window.jQuery`가 다르거나 버전이 다르면 플러그인이 다른 jQuery에 붙는다.
+- 콘솔 실행 컨텍스트를 iframe으로 바꿔야 iframe 쪽 값이 보인다. 여기서 **`$.fn.summernote`는 있고 `$.summernote`는 없는 것**을 보고 원인을 확정했다.
+- 이미 만들어진 에디터가 있으면, 그 뒤에 등록된 플러그인 버튼은 그 툴바에 나오지 않는다.
+
+**원인**: 플러그인 가드가 `$.summernote`를 검사하고 있었다. 이 네임스페이스는 에디터를 한 번 초기화한 뒤에 생긴다.
+
+## 해결
+
+```javascript
+// 가드 (6개 파일 공통)
+if ($ && $.fn && $.fn.summernote) { boot(window, $); return; }
+$.summernote = $.summernote || {};
+$.summernote.plugins = $.summernote.plugins || {};
+
+// 플러그인 동적 로딩 — 성공·실패 모두 같은 콜백, 카운터로 완료 감지
+function summer_ready() {
+  var files = ['note-fix', 'note-table', 'note-image',
+               'note-slash', 'note-dropdown', 'note-help'];
+  var left = files.length;
+  files.forEach(function (f) {
+    var s = document.createElement('script');
+    s.src = '/js/editor/' + f + '.js';
+    s.onload = s.onerror = function () {
+      if (--left === 0) {
+        var canEdit = "${requestScope.can_edit}";   // JSP EL로 권한 주입
+        if (canEdit == 'false') setEditable(false);
+      }
+    };
+    document.head.appendChild(s);
+  });
+}
+```
+
+- 네임스페이스가 아직 없으면 플러그인 저장소를 먼저 만들어 둔다.
+- 6개를 동시에 요청한다. `onload`와 `onerror`를 같은 함수로 묶어 하나가 404여도 카운터가 줄어 멈추지 않는다.
+- 플러그인끼리 의존하지 않아서 순서를 맞출 필요가 없었다. `--left === 0`이 마지막 파일이 끝난 시점이다.
+
+| 로딩 방식 | 판단 |
+|---|---|
+| 정적 태그 순서 고정 | 프레임워크가 Summernote를 나중에 붙여서 불가 |
+| 폴링 대기 | 보류 — 타이머 기반 |
+| 원본 파일 끝에 추가 | 대안 — 버전 업그레이드 때 유실 |
+| **`summer_ready()` 안 동적 로딩** | **채택** — 에디터 화면에서만 로드, 준비 시점 보장 |
+
+## iframe 안 에디터 크기
+
+세 번 바뀌었다. `window.innerWidth` 고정 → 퍼센트로 바꾸려다 CSS만으로는 깨짐 → **부모 CSS가 iframe 크기를 정하고 안쪽은 iframe 창 크기를 따라가는** 구조로 정리.
+
+```javascript
+// iframe 안쪽 — height 옵션은 편집 영역 높이라 툴바·상태바를 뺀다
+function fitEditor() {
+  var tb = $('.note-toolbar').outerHeight() || 0;
+  var sb = $('.note-statusbar').outerHeight() || 0;
+  $('.note-editor').outerWidth(window.innerWidth);
+  $('.note-editable').outerHeight(window.innerHeight - tb - sb - 2);
+}
+$(window).on('resize', function () { if ($('.note-editor').length) fitEditor(); });
+
+// 반드시 전역에 선언 — 부모가 contentWindow로 부른다
+function editMode() {
+  $('#content').summernote({ focus: true, callbacks: { onInit: fitEditor } });
+}
+function showMode()   { $('#content').summernote('destroy'); }  // HTML은 그대로 남음
+function getContent() { return $('#content').summernote('code'); }
+```
+
+```javascript
+// 부모 — 저장 시 iframe에서 HTML을 꺼내 hidden input에 넣고 form submit
+var frameWin = function () { return document.getElementById('editorIframe').contentWindow; };
+$('#btnEdit').on('click', function () { frameWin().editMode(); });
+$('#btnSave').on('click', function () {
+  $('#contentInput').val(frameWin().getContent());
+  $('#saveForm').submit();
+});
+```
+
+- 조회 모드는 `destroy` — 에디터만 걷어내고 HTML은 그대로 보여줘서 별도 뷰어가 필요 없다.
+- 저장 후 서버가 redirect해서 새로고침 시 재전송을 막는다(PRG 패턴).
+
+## 이미지 기능 메모
+
+| 기능 | 방법 |
+|---|---|
+| 크기 조절 | 기본 핸들과 팝오버. 안 되면 `popover.image`, `disableResizeImage`, 터치 기기 확인 |
+| 좌우 배치 | 기본 `floatLeft`/`floatRight` |
+| 자유 좌표 배치 | 미지원 — `position:absolute`는 저장한 HTML이 다른 곳에서 깨짐 |
+| DOM 직접 수정 후 | `$('#editor').data('summernote').invoke('editor.afterCommand')` |
+| 맞춤법 밑줄 | `spellCheck: false` |
+
+업로드 콜백이 없으면 Summernote는 이미지를 base64로 본문에 넣는다. 본문이 CLOB에 그대로 저장되므로 **이미지 크기가 곧 레코드 크기**가 된다. 마이그레이션에서 사진을 줄인 이유와 같다.
+
+---
+
+> [인사·조직 시스템 고도화 프로젝트](/posts/orgn-project)에서 실제로 작성·디버깅한 코드를 바탕으로 정리했다. 경로와 이름은 일반화했다.

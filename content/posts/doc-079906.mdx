@@ -1,0 +1,236 @@
+---
+title: "Vue.js 페이지 배포"
+summary: "Vue.js 애플리케이션의 다양한 배포 방식, 환경 설정, 보안 및 성능 최적화에 대한 포괄적인 가이드"
+date: 2025-01-05
+island: library
+room: frontend
+tags: ["Vue.js", "deployment", "DevOps", "web-development"]
+---
+## 목차
+1. 배포 전략 개요
+2. 정적 호스팅 서비스를 통한 배포
+3. 서버 기반 배포 방식
+4. 컨테이너화 배포
+5. 환경 설정 및 최적화
+6. 보안 고려사항
+7. 성능 모니터링
+
+## 1. 배포 전략 개요
+
+Vue.js 애플리케이션을 배포할 때는 프로젝트의 요구사항, 규모, 그리고 인프라 환경에 따라 적절한 전략을 선택해야 합니다. 배포 전략은 크게 정적 호스팅, 서버 기반 배포, 컨테이너화 배포로 나눌 수 있습니다.
+
+## 2. 정적 호스팅 서비스를 통한 배포
+
+### 2.1 GitHub Pages 배포
+GitHub Pages는 소규모 프로젝트나 개인 포트폴리오에 적합한 무료 호스팅 솔루션입니다.
+
+```bash
+# 빌드 설정
+vue.config.js:
+module.exports = {
+  publicPath: process.env.NODE_ENV === 'production'
+    ? '/repository-name/'
+    : '/',
+  outputDir: 'dist'
+}
+
+# 배포 스크립트
+deploy.sh:
+#!/usr/bin/env sh
+set -e
+npm run build
+cd dist
+git init
+git add -A
+git commit -m 'deploy'
+git push -f git@github.com:username/repository-name.git master:gh-pages
+cd -
+```
+
+### 2.2 Netlify/Vercel 배포
+현대적인 웹 애플리케이션 배포에 최적화된 플랫폼으로, CI/CD가 통합되어 있습니다.
+
+```toml
+# netlify.toml
+[build]
+  command = "npm run build"
+  publish = "dist"
+  environment = { NODE_VERSION = "16" }
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+```
+
+## 3. 서버 기반 배포 방식
+
+### 3.1 Nginx 설정
+Nginx는 고성능 웹 서버로, Vue.js SPA 호스팅에 널리 사용됩니다.
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    root /var/www/html/dist;
+    index index.html;
+
+    # GZIP 압축 설정
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+    
+    # 캐시 설정
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
+        expires 1y;
+        add_header Cache-Control "public, no-transform";
+    }
+
+    # SPA 라우팅
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # 보안 헤더
+    add_header X-Frame-Options "SAMEORIGIN";
+    add_header X-XSS-Protection "1; mode=block";
+    add_header X-Content-Type-Options "nosniff";
+}
+```
+
+## 4. 컨테이너화 배포
+
+### 4.1 Docker 멀티스테이지 빌드
+최적화된 프로덕션 이미지를 위한 Dockerfile 설정:
+
+```dockerfile
+# 빌드 스테이지
+FROM node:16-alpine as builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# 프로덕션 스테이지
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+### 4.2 Docker Compose 설정
+
+```yaml
+version: '3.8'
+services:
+  vue-app:
+    build: 
+      context: .
+      target: production-stage
+    ports:
+      - "80:80"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+```
+
+## 5. 환경 설정 및 최적화
+
+### 5.1 환경별 설정 관리
+```javascript
+// .env.production
+VUE_APP_API_URL=https://api.production.com
+VUE_APP_FEATURE_FLAG=true
+
+// .env.staging
+VUE_APP_API_URL=https://api.staging.com
+VUE_APP_FEATURE_FLAG=true
+```
+
+### 5.2 빌드 최적화
+```javascript
+// vue.config.js
+module.exports = {
+  productionSourceMap: false,
+  configureWebpack: {
+    optimization: {
+      splitChunks: {
+        chunks: 'all',
+        minSize: 20000,
+        maxSize: 250000,
+      }
+    },
+    performance: {
+      hints: 'warning',
+      maxEntrypointSize: 512000,
+      maxAssetSize: 512000
+    }
+  },
+  chainWebpack: config => {
+    config.plugin('preload').tap(options => {
+      options[0].include = 'initial'
+      return options
+    })
+  }
+}
+```
+
+## 6. 보안 고려사항
+
+### 6.1 CSP(Content Security Policy) 설정
+```nginx
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data: https:;";
+```
+
+### 6.2 프로덕션 빌드 보안 강화
+```javascript
+// main.js
+if (process.env.NODE_ENV === 'production') {
+  Vue.config.devtools = false
+  Vue.config.debug = false
+  Vue.config.silent = true
+}
+```
+
+## 7. 성능 모니터링
+
+### 7.1 성능 메트릭 수집
+```javascript
+// 성능 모니터링 설정
+import * as Sentry from "@sentry/vue";
+
+Sentry.init({
+  Vue,
+  dsn: "your-dsn",
+  tracesSampleRate: 1.0,
+  integrations: [
+    new Sentry.BrowserTracing({
+      routingInstrumentation: Sentry.vueRouterInstrumentation(router),
+    }),
+  ],
+});
+```
+
+### 7.2 라우트 기반 코드 스플리팅
+```javascript
+// router.js
+const routes = [
+  {
+    path: '/dashboard',
+    component: () => import(/* webpackChunkName: "dashboard" */ './views/Dashboard.vue'),
+    children: [
+      {
+        path: 'analytics',
+        component: () => import(/* webpackChunkName: "analytics" */ './views/Analytics.vue')
+      }
+    ]
+  }
+]
+```
+
+## 결론
+
+Vue.js 애플리케이션의 성공적인 배포를 위해서는 프로젝트의 요구사항을 정확히 파악하고, 적절한 배포 전략을 선택하는 것이 중요합니다. 위에서 설명한 다양한 배포 방식과 최적화 전략을 프로젝트 상황에 맞게 적용하면, 안정적이고 효율적인 운영이 가능합니다.
+
+이러한 배포 전략은 지속적으로 발전하고 있으며, 새로운 도구와 방법이 계속해서 등장하고 있습니다. 따라서 최신 트렌드를 주시하고, 필요에 따라 배포 전략을 업데이트하는 것이 좋습니다.

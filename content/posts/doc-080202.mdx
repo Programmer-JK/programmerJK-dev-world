@@ -1,0 +1,145 @@
+---
+title: "Docusaurus에 Tailwind CSS 적용하기"
+date: 2025-01-10
+island: library
+room: frontend
+tags: []
+---
+Docusaurus는 기술 문서 작성을 위한 훌륭한 정적 사이트 생성기입니다. 여기에 Tailwind CSS를 적용하면 더욱 효율적으로 스타일링을 할 수 있을 것 같아 추가를 결심하게 되었습니다. 이 글에서는 Docusaurus 프로젝트에 Tailwind CSS를 적용하는 방법을 단계별로 알아보겠습니다.
+
+## 필요한 패키지 설치
+
+먼저 Tailwind CSS와 관련된 필수 패키지들을 설치해야 합니다:
+
+```bash
+npm install tailwindcss postcss autoprefixer
+```
+
+## Tailwind 초기 설정
+
+Tailwind 설정 파일을 생성합니다:
+
+```bash
+npx tailwindcss init -p
+```
+
+이 명령어를 실행하면 `tailwind.config.js`와 `postcss.config.js` 두 개의 파일이 생성됩니다.
+
+## Tailwind 설정 파일 수정
+
+`tailwind.config.js` 파일을 다음과 같이 수정합니다:
+
+```javascript
+module.exports = {
+  content: [
+    "./src/**/*.{js,jsx,ts,tsx}",
+    "./docs/**/*.{md,mdx}",
+    "./blog/**/*.{md,mdx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+  darkMode: ['class', '[data-theme="dark"]'], // Docusaurus 다크모드 지원
+  corePlugins: {
+    preflight: false, // Docusaurus 기본 스타일과 충돌 방지
+  },
+}
+```
+
+## PostCSS 설정
+
+프로젝트 루트에 있는 `postcss.config.js` 파일의 내용을 다음과 같이 작성합니다:
+
+```javascript
+module.exports = {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+```
+
+## Docusaurus 설정 수정
+
+`docusaurus.config.ts` (또는 .js) 파일에서 다음 부분을 확인하고 수정합니다:
+
+1. presets 설정에 theme과 customCss 추가:
+```typescript
+presets: [
+    [
+      'classic',
+      {
+        docs: {
+          // ... 기존 docs 설정 유지
+        },
+        theme: {
+          customCss: './src/css/custom.css', // 이 부분을 추가
+        },
+        // ... 다른 설정들
+      } satisfies Preset.Options,
+    ],
+],
+```
+
+2. plugins 설정이 올바른지 확인 (Tailwind 설정은 여기에 포함시키지 않습니다):
+```typescript
+plugins: [
+    [
+      '@docusaurus/plugin-sitemap',
+      {
+        changefreq: 'weekly',
+        priority: 0.5,
+        ignorePatterns: ['/tags/**'],
+        filename: 'sitemap.xml',
+      },
+    ],
+],
+```
+
+## Tailwind 디렉티브 추가
+
+`src/css/custom.css` 파일에 Tailwind 디렉티브를 추가합니다:
+
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 기존 CSS 내용은 그대로 유지 */
+```
+
+## 사용하기
+
+이제 마크다운 파일이나 React 컴포넌트에서 Tailwind 클래스를 사용할 수 있습니다:
+
+```jsx
+export default function MyComponent() {
+  return (
+    <div className="p-4 bg-blue-500 text-white rounded-lg">
+      Tailwind CSS가 적용된 컴포넌트
+    </div>
+  );
+}
+```
+
+## 주의사항
+
+1. **스타일 충돌**: Docusaurus의 기본 스타일과 Tailwind가 충돌할 수 있습니다. 이런 경우에는 `!important`를 사용하거나 특정 스타일을 재정의해야 할 수 있습니다.
+
+2. **마크다운 사용**: 마크다운 파일에서 Tailwind 클래스를 사용하려면 MDX를 사용해야 합니다.
+
+3. **다크모드**: Tailwind의 다크모드가 Docusaurus의 다크모드와 호환되도록 설정했는지 확인하세요.
+
+## 문제 해결
+
+만약 Tailwind 클래스가 적용되지 않는다면 다음 사항들을 체크해보세요:
+
+1. 모든 필요한 패키지가 올바르게 설치되었는지 확인
+2. PostCSS 설정이 올바른지 확인
+3. `custom.css` 파일이 올바른 경로에 있고, presets에서 참조되고 있는지 확인
+4. 개발 서버를 재시작
+
+## 결론
+
+이제 Docusaurus 프로젝트에서 Tailwind CSS를 사용할 수 있습니다. Tailwind CSS의 유틸리티 클래스를 활용하여 더욱 효율적으로 스타일링을 할 수 있게 되었습니다. 추가적인 커스터마이징이 필요하다면 `tailwind.config.js` 파일에서 설정을 수정하면 됩니다.

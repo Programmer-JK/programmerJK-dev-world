@@ -1,0 +1,54 @@
+---
+title: "네트워크 기초"
+summary: "네트워크의 기본 개념과 TCP/IP, OSI 7계층 모델에 대한 상세 설명"
+date: 2024-11-10
+island: library
+room: devops
+tags: ["network", "osi-model", "tcp-ip", "network-protocols", "network-architecture", "data-communication"]
+---
+## 네트워크 기본 개념
+- 네트워크 : 여러 컴픁터를 연결한 통신망
+- 인터넷 : 규모가 가장 큰 네트워크
+- 웹 : 클라이언트 프로그램 (웹 브라우저)를 통해 웹 서버에 저장된 데이터를 네트워크 통신망을 통해 내려받는 서비스
+## 네트워크의 종류
+- LAN : Local Area Network
+- WAN : Wide Area Network
+- CAN : Campus Area Network
+- MAN : Metropolice Area Network
+## 네트워크에서 데이터를 주고 받는 방법
+- Unicast : 데이터를 특정 컴퓨터 1대에만 보내는 방식
+- Multicast : 데이터를 같은 네트워크에 있는 특정 컴퓨터 여러 대에 보내는 방식
+- Broadcast : 데이터를 같은 네트워크에 있는 모든 컴퓨터에 보내는 방식
+
+
+## TCP/IP 모델
+ - 4계층 : 응용
+	 - 5 6 7 계층
+ - 3계층 : 전송
+	 - 4 계층
+ - 2계층 : 인터넷
+	 - 3 계층
+ - 1계층 : 네트워크 액세스
+	- 1 2 계층 
+## OSI 7계층 모델
+- 7계층 : Application Layer
+	- 통신 프로그램에 따라 각각의 양식으로 데이터를 주고 받는 역할 수행
+	- HTTP, FTP, DNS
+- 6계층 : Presentation Layer
+	- 전송할 데이터의 파일 형식을 알려 주는 역할 수행
+	- JPEG, PNG, ZIP, MP4
+- 5계층 : Session Layer
+	- 네트워크가 연결된 상태를 관리하는 역할 수행
+	- NetBIOS, SMB, PPTP, RPC
+- 4계층 : Transport Layer
+	- 실행 중인 프로그램을 연결하는 역할 수행
+	- TCP, UDP, Socket
+- 3계층 : Network Layer
+	- 경로를 결정하고 라우팅 역할을 수행
+	- ARP, IP, ICMP
+- 2계층 : Data Link Layer
+	- 같은 LAN에 있는 장치를 찾아가는 역할 수행
+	- Ethernet, ppp, MAC  
+- 1계층 : Physical Layer 
+	- 전기적 신호를 전송하는 역할 수행
+	- IEEE 802.3 , IEEE 802.11

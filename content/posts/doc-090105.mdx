@@ -1,0 +1,86 @@
+---
+title: "redirect 관련 RuntimeError"
+date: 2025-01-04
+island: library
+room: frontend
+tags: []
+---
+## 문제 상황
+Next.js 프로젝트에서 401 상태 코드를 받았을 때 로그인 페이지로 리다이렉션하는 유틸리티 함수를 구현하던 중 다음과 같은 에러가 발생했습니다:
+
+```typescript
+// src/util/fetch.ts
+if (res.status === 401) {
+  const tokensRequest = await fetch('/api/reissue', init);
+  if (!tokensRequest.ok) return redirect('/login');  // 여기서 에러 발생
+  ...
+}
+```
+
+```
+Unhandled Runtime Error
+Error: NEXT_REDIRECT
+```
+
+## 원인
+이 에러가 발생한 주요 원인은:
+
+1. Next.js의 `redirect` 함수를 일반 유틸리티 함수에서 사용했기 때문
+2. `redirect`는 서버 컴포넌트나 페이지 컴포넌트에서 사용되어야 함
+
+## 해결 방법들
+
+### 1. Promise.reject 사용
+유틸리티 함수에서는 에러를 throw하고, 상위 컴포넌트에서 redirect를 처리:
+
+```typescript
+// src/util/fetch.ts
+if (!tokensRequest.ok) {
+  return Promise.reject(new Error('UNAUTHORIZED'));
+}
+
+// 사용하는 컴포넌트에서
+try {
+  await FetchWithJWT('/api/something');
+} catch (error) {
+  if (error.message === 'UNAUTHORIZED') {
+    redirect('/login');
+  }
+}
+```
+
+### 2. navigation 함수를 파라미터로 받기
+```typescript
+export const FetchWithJWT = async (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  navigation?: (path: string) => void
+) => {
+  if (!tokensRequest.ok) {
+    if (navigation) {
+      navigation('/login');
+      return new Response();
+    }
+  }
+};
+
+// 사용할 때
+const Component = () => {
+  const router = useRouter();
+  await FetchWithJWT('/api/something', {}, router.push);
+};
+```
+
+### 3. throw redirect 사용
+Next.js 13 이상에서는 redirect를 throw하여 사용할 수 있습니다:
+
+```typescript
+import { redirect } from 'next/navigation';
+
+if (!tokensRequest.ok) {
+  throw redirect('/login');
+}
+```
+
+## 결론
+Next.js에서 리다이렉션을 처리할 때는 해당 기능이 실행되는 컨텍스트를 잘 고려해야 합니다. 일반 유틸리티 함수에서는 직접적인 리다이렉션보다는 에러를 throw하고, 상위 컴포넌트에서 적절히 처리하는 것이 좋습니다.

@@ -1,0 +1,130 @@
+---
+title: "정규식"
+date: 2025-01-17
+island: library
+room: algo
+tags: []
+---
+1. 기본 메서드들
+```javascript
+// test(): 패턴 매칭 여부 확인 (true/false 반환)
+const pattern = /hello/;
+pattern.test("hello world"); // true
+
+// match(): 매칭되는 결과를 배열로 반환
+"hello world".match(/o/g); // ['o', 'o']
+
+// replace(): 매칭되는 부분을 교체
+"hello world".replace(/o/g, "0"); // "hell0 w0rld"
+
+// exec(): 매칭 결과를 순차적으로 반환
+const regex = /o/g;
+regex.exec("hello world"); // ['o']
+regex.exec("hello world"); // ['o']
+regex.exec("hello world"); // null
+```
+
+2. 자주 사용하는 패턴들
+```javascript
+// 숫자만
+/^[0-9]+$/
+/^\d+$/
+
+// 영문자만
+/^[A-Za-z]+$/
+
+// 한글만
+/^[가-힣]+$/
+
+// 이메일
+/^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
+
+// 전화번호
+/^01[016789]-?\d{3,4}-?\d{4}$/
+
+// 날짜 (YYYY-MM-DD)
+/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/
+
+// 공백 제거
+str.replace(/\s/g, '')      // 모든 공백 제거
+str.replace(/^\s+|\s+$/g, '') // 앞뒤 공백만 제거
+
+// URL
+/https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#()?&//=]*)/
+```
+
+3. 주요 정규식 문법
+```javascript
+// 플래그
+/pattern/g  // global: 모든 매칭 찾기
+/pattern/i  // ignore case: 대소문자 구분 안 함
+/pattern/m  // multiline: 여러 줄 매칭
+/pattern/s  // dotall: .이 개행문자도 매칭
+
+// 수량자
+* // 0회 이상
++ // 1회 이상
+? // 0회 또는 1회
+{n} // n회
+{n,} // n회 이상
+{n,m} // n회 이상 m회 이하
+
+// 특수문자
+\d // 숫자 [0-9]
+\D // 숫자가 아닌 문자
+\w // 단어 문자 [A-Za-z0-9_]
+\W // 단어 문자가 아닌 문자
+\s // 공백 문자
+\S // 공백이 아닌 문자
+. // 줄바꿈을 제외한 모든 문자
+```
+
+4. 실전 예제
+```javascript
+// 비밀번호 유효성 검사 (8-20자, 영문, 숫자, 특수문자 조합)
+const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{8,20}$/;
+
+// 문자열에서 HTML 태그 제거
+const stripHtml = str => str.replace(/<[^>]*>/g, '');
+
+// 천단위 콤마 추가
+const addCommas = str => str.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+// 파일 확장자 추출
+const getExtension = filename => {
+    return filename.match(/\.([^.]+)$/)?.[1] || '';
+};
+
+// 유튜브 URL에서 동영상 ID 추출
+const getYoutubeId = url => {
+    const match = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
+    return match ? match[1] : null;
+};
+```
+
+5. 유용한 팁
+```javascript
+// 정규식 리터럴 vs 생성자
+// 리터럴 (권장)
+const regex1 = /pattern/;
+
+// 생성자 (동적 패턴 생성 시 사용)
+const pattern = 'pattern';
+const regex2 = new RegExp(pattern);
+
+// 그룹 캡처
+const str = "hello world";
+const match = str.match(/(\w+)\s(\w+)/);
+console.log(match[1]); // "hello"
+console.log(match[2]); // "world"
+
+// 전방탐색(?=) / 후방탐색(?<=)
+/\d+(?=px)/  // 'px' 앞의 숫자들
+/(?<=\$)\d+/ // '$' 뒤의 숫자들
+```
+
+코딩 테스트에서는 특히:
+1. 문자열 파싱
+2. 입력 유효성 검사
+3. 특정 패턴 추출/변환
+4. 문자열 정제

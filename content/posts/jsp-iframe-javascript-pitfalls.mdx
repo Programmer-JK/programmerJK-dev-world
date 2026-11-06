@@ -1,0 +1,107 @@
+---
+title: "JSP·iframe 화면에서 만난 JavaScript 함정들"
+summary: "EL이 먹어버린 템플릿 리터럴, 빈 배열의 every, 콜백 안 this, 선택자를 깨는 ID, iframe 경계를 못 넘는 jQuery, 비동기 그리드."
+date: 2026-09-26
+island: library
+room: frontend
+project: finance-orgn
+tags: ["JavaScript", "JSP", "iframe", "IBSheet", "디버깅"]
+---
+
+화면은 iframe 구조의 프레임워크 위에서 동작했다. 대부분의 문제가 **"어느 문서, 어느 `$`, 어느 시점인가"**로 귀결됐다.
+
+## 1. JSP 안 템플릿 리터럴
+
+JSP는 `${…}`를 서버에서 EL로 먼저 처리해 다른 값으로 바꾼 뒤 브라우저로 보낸다. JS 템플릿 리터럴의 `${}`와 충돌한다.
+
+```javascript
+badge.textContent = '합계 ' + total + '점';   // JSP 안에서는 문자열 연결로
+```
+
+배지 문구가 이상하게 나온 원인이 이것이었다. 문자열 연결을 쓰거나, 꼭 필요하면 `\${…}`로 이스케이프한다. 로직은 별도 `.js` 파일로 빼는 게 가장 안전하다. 반대로 서버 값(권한 플래그 등)을 JS로 넘길 때는 EL을 일부러 쓴다.
+
+## 2. 빈 배열의 every는 항상 참
+
+실행 설정 모달의 시작 버튼은 알고리즘 선택, 가중치 합계 100, 체크한 제약조건의 값 입력이 모두 될 때만 활성화돼야 했다. 그런데 무조건 활성화됐다.
+
+```javascript
+[].every(function (el) { return el.value !== ''; });   // true — 대상 0개도 통과
+
+var el = document.getElementById('c-score');
+if (!el) console.warn('제약조건 요소를 찾지 못함: c-score');
+```
+
+`every`는 "거짓인 원소가 없으면" true라서 원소가 0개면 true다(`some`은 false). 선택자가 틀려 대상이 0개가 되자 검사가 통째로 통과됐다. 요소를 못 찾으면 조용히 넘어가지 말고 `console.warn`을 남긴다.
+
+## 3. 코드로 넣은 값은 이벤트를 안 일으킨다
+
+`el.value = …`, `checked = true`처럼 코드로 값을 바꾸면 `input`/`change` 이벤트가 발생하지 않는다. 값이 바인딩된 직후 버튼 상태가 그대로였던 이유다. 값을 넣은 코드가 갱신 함수를 직접 부르거나 `el.dispatchEvent(new Event('change'))`로 알린다.
+
+비슷하게, 팝업이 나중에 주입되거나 값이 Ajax로 채워지면 ready 시점에는 값이 비어 있다. **이벤트 시점에 값을 읽는다.**
+
+## 4. querySelector와 querySelectorAll
+
+`querySelector`는 첫 요소 하나(없으면 null), `querySelectorAll`은 NodeList(없으면 빈 목록)다. `forEach`는 NodeList에만 있어서 요소에 부르면 "is not a function"이 난다.
+
+## 5. 콜백 안 this와 네임스페이스 객체
+
+모듈·번들러를 못 쓰는 JSP 환경에서는 여러 파일이 같은 전역 객체에 기능을 나눠 붙인다.
+
+```javascript
+var App = App || {};
+App.mapEvent = {
+  drillLevel: 0,
+  currentRegion: null,
+  toPointId: function (empId) {          // + / = 를 선택자에 안전한 문자로
+    return 'emp_' + String(empId).replace(/[^a-zA-Z0-9_-]/g, '_');
+  },
+  drilldown: function (code) {
+    App.mapEvent.drillLevel++;             // this 대신 전체 이름
+    App.mapEvent.currentRegion = code;
+  }
+};
+```
+
+- `obj.method()`로 부르면 `this`는 obj지만, **콜백으로 넘기면 함수만 전달**돼서 `this`는 라이브러리가 정한 값이 된다. `this.drillLevel++`이 실패한 이유다. 전체 이름으로 참조하거나 `.bind(obj)`, 화살표 함수를 쓴다.
+- `App is not defined`는 대개 앞 파일의 문법 오류나 캐시다. 첫 번째 콘솔 에러부터 본다.
+
+## 6. 선택자를 깨는 ID
+
+Base64로 인코딩된 직원 ID에 `+ / =`가 들어 있어 `#id` 선택자 문법이 깨졌다. `CSS.escape()`로 이스케이프하거나, ID를 만들 때부터 안전한 문자로 바꾼다. 중요한 건 **생성과 선택 양쪽에서 같은 함수**(`toPointId`)를 쓰는 것이다. 단방향 변환이라 원래 ID는 별도 속성에 보관했다.
+
+## 7. iframe 경계를 못 넘는 jQuery
+
+그리드가 iframe 안에 있어서 요약행 요소를 못 찾았다. `document.querySelector`는 현재 문서만 검색한다.
+
+```javascript
+var doc = document.querySelector('#gridFrame').contentDocument;   // 문서
+var win = document.querySelector('#gridFrame').contentWindow;     // 그 안의 $, 전역 함수
+```
+
+jQuery도 iframe 경계를 넘지 못한다. `.empty() is not a function` 같은 오류가 나면 `$`가 다른 라이브러리로 덮였는지 `typeof $`, `$.fn.jquery`로 확인한다.
+
+## 8. 비동기 그리드(IBSheet7)
+
+- 조회·저장은 비동기다. 결과가 필요한 다음 작업은 완료 이벤트(`OnSearchEnd`)나 콜백 안에서 한다. 콤보 변경 후 자동 조회도 첫 호출의 성공 콜백 안에서 다음 조회를 불렀다.
+- 행 상태(입력·수정·삭제)를 시트가 관리한다. **DOM을 직접 지우면 상태와 화면이 어긋난다.** API로 지운다.
+- 여러 행 삭제는 **뒤에서부터**. 앞에서 지우면 뒤 행 번호가 당겨져 건너뛴다.
+- `ExportData({Type:'json'})`은 배열이 아니라 `{data:[…]}`라서 길이는 `rowData.data.length`.
+- 엑셀 업로드 값 보정은 업로드 완료 이벤트(`OnLoadExcel`)에서 한다.
+
+## 9. 작은 UI 디테일
+
+- 버튼 색은 WCAG 대비 4.5:1 이상의 진한 톤으로.
+- 변경 알림 버튼은 3회 펄스, `prefers-reduced-motion`이면 생략.
+- 안내 문구 접기는 `details` 요소로.
+- 빈 검색값이면 API를 호출하지 않고, 공통 버튼은 행 단위로 옮겨 오조작을 막았다.
+
+## 정리
+
+- iframe 구조에서는 "어느 문서, 어느 `$`"부터 확인한다 — 콘솔 컨텍스트, `contentDocument`.
+- 에러 메시지의 주체가 브라우저인지 내 코드인지부터 본다.
+- 콜백 안 `this`는 믿지 말고 전체 이름으로 참조한다.
+- 프로그램으로 넣은 값은 이벤트를 안 일으키고, 빈 배열 `every()`는 항상 참이다.
+
+---
+
+> [인사·조직 시스템 고도화 프로젝트](/posts/orgn-project)에서 실제로 작성·디버깅한 코드를 바탕으로 정리했다. 경로와 이름은 일반화했다.

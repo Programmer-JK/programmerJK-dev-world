@@ -1,0 +1,412 @@
+---
+title: "React 면접 준비"
+date: 2025-01-01
+island: library
+room: frontend
+tags: []
+---
+## 1. useState vs useReducer: 언제 무엇을 선택할까?
+
+상태 관리는 React 애플리케이션에서 가장 중요한 부분 중 하나입니다. useState와 useReducer는 각각 다른 상황에서 유용하게 사용될 수 있습니다.
+
+### useState가 적합한 경우
+- 독립적인 단순한 상태 값 관리
+- 상태 업데이트 로직이 단순할 때
+- 상태 변경이 2-3개의 간단한 액션으로 이뤄질 때
+
+```jsx
+function Counter() {
+  const [count, setCount] = useState(0);
+  return (
+    <button onClick={() => setCount(prev => prev + 1)}>
+      Count: {count}
+    </button>
+  );
+}
+```
+
+### useReducer가 적합한 경우
+- 여러 상태가 서로 연관되어 있을 때
+- 복잡한 상태 업데이트 로직이 필요할 때
+- 상태 변경 패턴을 일관되게 관리해야 할 때
+
+```jsx
+function reducer(state, action) {
+  switch (action.type) {
+    case 'increment':
+      return { ...state, count: state.count + 1 };
+    case 'decrement':
+      return { ...state, count: state.count - 1 };
+    case 'reset':
+      return { count: 0, lastReset: Date.now() };
+    default:
+      return state;
+  }
+}
+
+function ComplexCounter() {
+  const [state, dispatch] = useReducer(reducer, { count: 0, lastReset: null });
+  
+  return (
+    <div>
+      <p>Count: {state.count}</p>
+      <button onClick={() => dispatch({ type: 'increment' })}>+</button>
+      <button onClick={() => dispatch({ type: 'decrement' })}>-</button>
+      <button onClick={() => dispatch({ type: 'reset' })}>Reset</button>
+    </div>
+  );
+}
+```
+
+## 2. 커스텀 훅의 강력함
+
+커스텀 훅은 React의 코드 재사용성을 크게 향상시키는 강력한 패턴입니다.
+
+### 커스텀 훅의 장점
+1. 로직 재사용성 향상
+2. 관심사 분리를 통한 코드 구조화
+3. 테스트 용이성
+4. 코드 가독성 개선
+
+```jsx
+// 윈도우 크기를 추적하는 커스텀 훅
+function useWindowSize() {
+  const [size, setSize] = useState({
+    width: window.innerWidth,
+    height: window.innerHeight
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setSize({
+        width: window.innerWidth,
+        height: window.innerHeight
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return size;
+}
+
+// 사용 예시
+function ResponsiveComponent() {
+  const { width, height } = useWindowSize();
+  
+  return (
+    <div>
+      Window size: {width} x {height}
+    </div>
+  );
+}
+```
+
+## 3. React의 성능 최적화 트리오: memo, useMemo, useCallback
+
+React 애플리케이션의 성능을 최적화하는 세 가지 핵심 도구에 대해 알아보겠습니다.
+
+### React.memo
+컴포넌트의 props가 변경되지 않았다면 리렌더링을 방지합니다.
+
+```jsx
+const ExpensiveComponent = React.memo(({ data }) => {
+  // 복잡한 렌더링 로직
+  return <div>{/* 렌더링 결과 */}</div>;
+});
+```
+
+### useMemo
+계산 비용이 큰 값의 재계산을 방지합니다.
+
+```jsx
+function DataProcessor({ data }) {
+  const processedData = useMemo(() => {
+    return data.map(item => expensiveCalculation(item));
+  }, [data]);
+
+  return <div>{processedData.map(item => <Item key={item.id} {...item} />)}</div>;
+}
+```
+
+### useCallback
+함수의 불필요한 재생성을 방지합니다.
+
+```jsx
+function ParentComponent({ data }) {
+  const handleClick = useCallback(() => {
+    console.log(data);
+  }, [data]);
+
+  return <ChildComponent onClick={handleClick} />;
+}
+```
+
+## 4. useEffect: 모범 사례와 주의사항
+
+useEffect는 React의 부수 효과를 관리하는 핵심 훅입니다.
+
+### 모범 사례
+1. 의존성 배열 정확히 지정하기
+2. 클린업 함수 활용하기
+3. API 호출 관리하기
+
+```jsx
+function DataFetcher({ url }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    
+    async function fetchData() {
+      try {
+        const response = await fetch(url, {
+          signal: controller.signal
+        });
+        const result = await response.json();
+        setData(result);
+      } catch (error) {
+        if (!error.name === 'AbortError') {
+          setError(error);
+        }
+      }
+    }
+
+    fetchData();
+
+    return () => {
+      controller.abort();
+    };
+  }, [url]);
+
+  if (error) return <div>Error: {error.message}</div>;
+  if (!data) return <div>Loading...</div>;
+  
+  return <div>{/* 데이터 표시 */}</div>;
+}
+```
+
+### 주의사항
+- 무한 루프 방지하기
+- 불필요한 의존성 제거하기
+- 부수 효과 최소화하기
+
+## 5. 코드 스플리팅과 React.lazy
+
+대규모 애플리케이션의 성능을 향상시키기 위한 코드 스플리팅 전략을 살펴보겠습니다.
+
+```jsx
+const LazyComponent = React.lazy(() => import('./LazyComponent'));
+
+function App() {
+  return (
+    <Suspense fallback={<LoadingSpinner />}>
+      <Routes>
+        <Route 
+          path="/dashboard" 
+          element={<LazyComponent />} 
+        />
+      </Routes>
+    </Suspense>
+  );
+}
+```
+
+## 6. useContext: 전역 상태 관리의 강력함과 주의점
+
+Context API를 통한 상태 관리의 장단점을 알아보겠습니다.
+
+```jsx
+const ThemeContext = React.createContext();
+
+function ThemeProvider({ children }) {
+  const [theme, setTheme] = useState('light');
+  
+  const value = useMemo(() => ({
+    theme,
+    setTheme
+  }), [theme]);
+
+  return (
+    <ThemeContext.Provider value={value}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+```
+
+### 주의사항
+1. Context 값 변경 시 모든 소비자 컴포넌트가 리렌더링됨
+2. 성능 최적화를 위한 적절한 Context 분리 필요
+3. 상태 업데이트 로직의 중앙화 필요
+
+## 7. 복잡한 컴포넌트 설계 원칙
+
+효율적인 React 컴포넌트 설계를 위한 핵심 원칙들을 살펴보겠습니다.
+
+### 단일 책임 원칙 (SRP)
+각 컴포넌트는 하나의 책임만 가져야 합니다.
+
+```jsx
+// 잘못된 예
+function UserProfile({ user }) {
+  return (
+    <div>
+      <UserInfo user={user} />
+      <UserPosts user={user} />
+      <UserFriends user={user} />
+      <UserSettings user={user} />
+    </div>
+  );
+}
+
+// 좋은 예
+function UserProfile({ user }) {
+  return <UserInfo user={user} />;
+}
+
+function UserDashboard({ user }) {
+  return (
+    <div>
+      <UserProfile user={user} />
+      <UserContent user={user} />
+    </div>
+  );
+}
+```
+
+### 컴포넌트 구성 패턴
+- 컨테이너/프레젠테이션 패턴
+- 고차 컴포넌트 (HOC)
+- 컴포지션
+
+## 8. 성능 분석 도구와 기법
+
+React 애플리케이션의 성능을 분석하고 최적화하는 방법을 알아보겠습니다.
+
+### 주요 도구
+1. React Developer Tools
+   - Components 탭
+   - Profiler 탭
+
+2. Chrome DevTools
+   - Performance 탭
+   - Network 탭
+
+3. Lighthouse
+   - 성능 점수
+   - 최적화 제안
+
+### why-did-you-render 활용
+불필요한 리렌더링을 찾아내는 강력한 도구입니다.
+
+```jsx
+import whyDidYouRender from '@welldone-software/why-did-you-render';
+import React from 'react';
+
+if (process.env.NODE_ENV === 'development') {
+  whyDidYouRender(React, {
+    trackAllPureComponents: true,
+  });
+}
+```
+
+## 9. Todo 리스트 실시간 상태 관리
+
+실제 프로젝트에서 자주 구현하게 되는 Todo 리스트를 통해 상태 관리 전략을 살펴보겠습니다.
+
+```jsx
+function useTodoList() {
+  const [todos, setTodos] = useState([]);
+
+  const addTodo = useCallback((text) => {
+    setTodos(prev => [...prev, {
+      id: Date.now(),
+      text,
+      completed: false
+    }]);
+  }, []);
+
+  const deleteTodo = useCallback((id) => {
+    setTodos(prev => prev.filter(todo => todo.id !== id));
+  }, []);
+
+  const toggleTodo = useCallback((id) => {
+    setTodos(prev => prev.map(todo =>
+      todo.id === id
+        ? { ...todo, completed: !todo.completed }
+        : todo
+    ));
+  }, []);
+
+  return {
+    todos,
+    addTodo,
+    deleteTodo,
+    toggleTodo
+  };
+}
+
+function TodoApp() {
+  const { todos, addTodo, deleteTodo, toggleTodo } = useTodoList();
+  const [input, setInput] = useState('');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+    addTodo(input);
+    setInput('');
+  };
+
+  return (
+    <div>
+      <form onSubmit={handleSubmit}>
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          placeholder="Add a todo"
+        />
+        <button type="submit">Add</button>
+      </form>
+      <ul>
+        {todos.map(todo => (
+          <li key={todo.id}>
+            <input
+              type="checkbox"
+              checked={todo.completed}
+              onChange={() => toggleTodo(todo.id)}
+            />
+            <span style={{
+              textDecoration: todo.completed ? 'line-through' : 'none'
+            }}>
+              {todo.text}
+            </span>
+            <button onClick={() => deleteTodo(todo.id)}>Delete</button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+## 10. Virtual DOM과 성능 최적화
+
+React의 Virtual DOM이 어떻게 성능을 최적화하는지 살펴보겠습니다.
+
+### Virtual DOM의 작동 원리
+1. 상태 변경 발생
+2. 새로운 Virtual DOM 트리 생성
+3. 이전 Virtual DOM과 비교 (Diffing)
+4. 실제 DOM에 최소한의 변경사항 적용
+
+### 성능 최적화 전략
+1. 불필요한 리렌더링 방지
+2. 상태 업데이트 일괄 처리
+3. 컴포넌트 분할과 메모이제이션
+
+## 마무리
+
+이러한 개념들은 실제 프로젝트에서 다양한 방식으로 활용됩니다. 면접에서는 이론적인 이해뿐만 아니라, 실제 프로젝트에서의 적용 경험과 문제 해결 사례를 준비하는 것이 중요합니다. 특히 성능 최적화나 상태 관리와 관련된 실제 경험은 면접관들이 큰 관심을 가지는 부분입니다.

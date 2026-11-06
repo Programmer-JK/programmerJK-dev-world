@@ -1,0 +1,26 @@
+---
+title: 2026년 1분기 회고 — 학습 파이프라인을 설계하다
+summary: 모델 후보 검토부터 자동 학습·운영 설계, 트레이너 다섯 개, Multi-LoRA와 임베딩 파인튜닝의 함정까지.
+date: 2026-04-01
+island: inn
+room: chronicles
+tags: [회고, Fine-tuning, MLOps, LoRA]
+---
+
+## 한 일
+
+- **모델 검토**: 메인 LLM PoC 기술 검토 보고서를 쓰고, 크로스인코더와 경량 LLM 후보를 각각 세 개씩 골랐다.
+- **학습 파이프라인**: [LLM 파이프라인 자동 학습·운영 설계](/posts/llm-pipeline-auto-training)를 썼다. 언제 재학습할지([드리프트와 재학습 트리거](/posts/drift-retraining-trigger)), 그전에 무엇을 먼저 할지([재학습 이전 적용 사항](/posts/rag-before-retraining)), 실험은 [MLflow로 관리](/posts/rag-training-mlflow)하는 것까지 정리했다.
+- **트레이너**: 임베딩, 크로스인코더 리랭커, 의도 분류와 작업 계획, NL2SQL, NL2API용 트레이너를 나눠 설계했다.
+- **도메인 특화**: 하나의 베이스 모델에 여러 LoRA 어댑터를 붙이는 Multi-LoRA 구조를 문서로 만들었다.
+- **프롬프트와 청킹**: NL2SQL 프롬프트를 Persona·Objective·Model·Question·Schema·Constraints 틀로 다시 짰다. 계층적 청킹 전략도 세웠다.
+- **기타**: Dockerfile의 `EXPOSE`와 nginx `listen`이 서로 다른 층위라는 것을 장애를 겪으며 배웠다.
+
+## 배운 것
+
+- 임베딩 파인튜닝에서 `MultipleNegativesRankingLoss`는 배치 안 다른 문서를 모두 오답으로 본다. 비슷한 문서가 많은 도메인에서는 이게 거짓 오답이 된다. 하드 네거티브를 넣은 세 쌍 학습과 일부 레이어만 푸는 방식이 더 나았다. ([Loss 정리](/posts/embedding-loss-functions))
+- [평가 기준](/posts/rag-evaluation-guide)이 먼저다. 자동 지표는 판사가 아니라 경보기다.
+
+## 다음
+
+- 학습한 모델을 더 싸고 빠르게 서빙하기: 양자화.

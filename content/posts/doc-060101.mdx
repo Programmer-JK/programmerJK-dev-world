@@ -1,0 +1,63 @@
+---
+title: "객체 접근 문제"
+date: 2025-03-19
+island: library
+room: frontend
+tags: []
+---
+클래스의 초기화 과정에서 발생하는 문제를 분석해 보겠습니다.
+
+## 관찰된 증상
+
+1. 콘솔 로그에서:
+    - `console.log("aaa", setting.dashboard.widgetManager)` - widgetManager 객체에서 selectedWidget 속성이 보임
+    - `console.log("bbb", setting.dashboard.widgetManager.selectedWidget)` - undefined로 나옴
+2. 코드 구조:
+    
+    ```typescript
+    constructor(setting: Setting) {
+      this.setting = setting;
+      this.selectedWidget = setting.dashboard.widgetManager.selectedWidget;
+    }
+    ```
+    
+
+## 가능한 원인
+
+1. **객체 참조와 실제 값의 차이**
+    
+    - 콘솔에 객체를 직접 로깅할 때는 객체에 대한 라이브 참조를 보여줌
+    - 이 참조를 나중에 펼쳐볼 때는 현재 상태의 객체 내용을 보여줌
+    - 그러나 `widgetManager.selectedWidget`을 직접 로깅하면 그 시점의 값을 즉시 평가함
+2. **속성 접근 방식의 차이**
+    
+    - `widgetManager` 객체는 프로토타입 체인(`[[Prototype]]: IRBase`)을 통해 상속받은 속성들을 가짐
+    - 콘솔에서 객체를 펼쳐보면 프로토타입 체인의 속성까지 모두 표시됨
+    - 그러나 직접 `selectedWidget`에 접근할 때는 객체 자신의 속성만 검색될 수 있음
+3. **게터(Getter) 메서드**
+    
+    - `selectedWidget`이 게터 메서드로 구현되어 있을 수 있음
+    - 콘솔에서는 보이지만 실제 접근 시 다른 로직이 실행될 수 있음
+4. **타이밍 문제**
+    
+    - `selectedWidget`이 비동기적으로 설정되거나 초기화되는 경우
+    - 첫 번째 로그 시점에는 없었지만, 나중에 콘솔에서 객체를 펼쳐볼 때는 이미 설정됨
+
+## 적합한 해결 방법
+
+이 문제는 위젯이 동적으로 선택/변경되는 환경에서 발생하는 것으로 보입니다. 따라서:
+
+1. **옵셔널 처리**: `selectedWidget`을 옵셔널 타입으로 선언하고, 접근 시 null 체크를 수행
+    
+2. **이벤트 기반 접근**: 위젯 선택 이벤트를 구독하여 위젯이 선택될 때마다 업데이트
+    
+3. **상태 관리**: 위젯 상태에 따라 SettingData 클래스의 동작을 조정하는 메커니즘 도입
+    
+4. **지연 초기화**: 필요한 시점에 위젯을 가져오는 방식으로 접근
+    
+
+## 핵심 문제점
+
+결국 이 문제의 핵심은 **"보이는 것과 실제 접근 가능한 것의 불일치"**입니다. JavaScript/TypeScript에서 이런 불일치가 발생하는 이유는 객체의 동적 특성, 프로토타입 상속, 속성 디스크립터(게터/세터) 등의 메커니즘이 복합적으로 작용하기 때문입니다.
+
+효과적인 해결책은 위젯의 라이프사이클을 이해하고, 위젯이 항상 필요한지 아니면 선택적으로 필요한지에 따라 적절한 패턴을 적용하는 것입니다.

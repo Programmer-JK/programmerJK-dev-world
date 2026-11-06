@@ -1,0 +1,122 @@
+---
+title: "Vue Store 관리에서 API 통신 패턴 고민"
+date: 2025-01-31
+island: library
+room: frontend
+tags: []
+---
+## 고민
+최근 Vue 프로젝트에서 Pinia를 사용하면서 다음과 같은 고민이 생겼습니다:
+
+```typescript
+// 현재 store/todo.ts
+export const useTodoStore = defineStore('todo', {
+  actions: {
+    async handleUpdate(formData: TodoType) {
+      try {
+        // API 통신 로직
+        await apiClient.put(`/${formData.id}`, {
+          todo: formData.todo,
+          // ...
+        })
+        
+        // 상태 업데이트 로직
+        const index = this.todos.findIndex((todo) => todo.id === formData.id)
+        if (index !== -1) {
+          this.todos[index] = { ...this.todos[index], ...formData }
+        }
+      } catch (error) {
+        console.error(error)
+      }
+    }
+  }
+})
+```
+
+"store에 API 통신 로직을 두는 게 맞을까?" 이런 의문이 들었습니다. store는 상태 관리가 주 목적인데, API 통신까지 책임지는 것이 적절한지, 이런 구조가 유지보수에 좋을지 고민이 되었습니다.
+
+## 더 나은 구조를 찾아서
+
+이런 고민을 해결하기 위해 API 로직을 분리하는 방안을 검토했습니다:
+
+```typescript
+// api/todoApi.ts
+export const todoApi = {
+  updateTodo: async (id: string, todoData: TodoType) => {
+    return await apiClient.put(`/${id}`, { todo: todoData })
+  }
+}
+
+// stores/todoStore.ts
+export const useTodoStore = defineStore('todo', {
+  actions: {
+    async handleUpdate(formData: TodoType) {
+      try {
+        await todoApi.updateTodo(formData.id, formData)
+        // 상태 업데이트 로직만 남음
+      } catch (error) {
+        console.error(error)
+      }
+    }
+  }
+})
+```
+
+하지만 단순히 코드를 분리하는 것만으로는 큰 차이가 없어 보였습니다. 그래서 이 구조가 주는 실질적인 이점을 더 깊이 고민해보았습니다.
+
+## 구조 개선의 실질적 이점
+
+1. API 변경에 대한 유연성
+```typescript
+// api/todoApi.ts
+export const todoApi = {
+  updateTodo: async (id: string, todoData: TodoType) => {
+    // API 스펙이 변경되어도 이 부분만 수정하면 됨
+    const newRequestFormat = transformToNewFormat(todoData)
+    return await apiClient.put(`/v2/tasks/${id}`, newRequestFormat)
+  }
+}
+```
+
+2. 테스트 작성의 용이성
+```typescript
+// tests/stores/todoStore.test.ts
+describe('todoStore', () => {
+  it('updates todo correctly', async () => {
+    // API 호출은 mock으로 대체하기 쉬움
+    todoApi.updateTodo = vi.fn().mockResolvedValue({ /* ... */ })
+    const store = useTodoStore()
+    await store.handleUpdate(mockTodo)
+    expect(store.todos[0]).toEqual(expectedTodo)
+  })
+})
+```
+## 결론: 작은 변화가 가져올 큰 차이
+
+처음에는 단순한 코드 분리로 보였지만, 다음과 같은 장점들을 발견했습니다:
+
+1. **관심사의 분리**: store는 상태 관리에, API 모듈은 통신에 집중
+	1. 기존 `/todos` API가 `/v2/tasks`로 변경되었을 때, store 코드는 전혀 수정할 필요 없이 API 모듈만 수정하면 되었습니다.
+2. **테스트 용이성**: 각 부분을 독립적으로 테스트 가능
+	테스트 커버리지 향상 API 모듈과 store 각각에 대한 단위 테스트를 작성할 수 있어, 테스트 커버리지를 크게 높일 수 있었습니다.
+3. **재사용성**: 다른 컴포넌트나 store에서도 API 호출 가능
+	다른 기능(예: 대시보드)에서도 동일한 Todo API를 사용해야 할 때, store에 의존하지 않고 API 모듈을 직접 활용할 수 있었습니다.
+4. **유지보수성**: API 변경 시 한 곳만 수정하면 됨
+
+이런 이점들은 당장은 크게 체감되지 않을 수 있지만, 프로젝트가 커질수록 그 가치가 분명해질 것입니다. 특히 팀 프로젝트에서는 이러한 구조화된 접근이 협업을 더 쉽게 만들어줄 것입니다.
+
+코드 구조를 개선하는 것은 항상 trade-off가 존재합니다. 현재 프로젝트의 상황과 팀의 특성을 고려하여 적절한 방식을 선택하는 것이 중요합니다. 저의 경우 API 로직을 분리함으로써 얻은 이점이 초기 설정의 번거로움보다 크다고 판단했고, 실제로 유지보수와 테스트 작성이 훨씬 수월해졌습니다.
+
+> **TIP**
+>
+> ## 분리에 있어서 고려해야 할 요소들
+>
+> 1. 프로젝트 규모
+>   - 작은 프로젝트: 직접 API 통신 방식도 충분
+>   - 큰 프로젝트: API 로직 분리가 유지보수에 유리
+> 2. 팀의 크기
+>   - 소규모 팀: 단순한 구조가 유리할 수 있음
+>   - 대규모 팀: 명확한 책임 분리가 중요
+> 3. API 재사용 빈도
+>   - 높은 재사용성이 필요한 경우: API 로직 분리가 유리
+>   - 단순 CRUD: 직접 통신 방식도 무방

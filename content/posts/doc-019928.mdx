@@ -1,0 +1,85 @@
+---
+title: "DNS 최적화"
+summary: "DNS 조회 과정의 최적화 방법, 구현 기법, 성능 측정 및 모범 사례에 대한 포괄적 가이드"
+date: 2025-02-17
+island: library
+room: frontend
+tags: ["DNS", "웹성능최적화", "네트워크최적화", "웹개발"]
+---
+DNS 조회 과정의 최적화 방법을 다음과 같이 설명해드리겠습니다:
+
+1. DNS Prefetching (DNS 미리 조회)
+```html
+<link rel="dns-prefetch" href="//example.com">
+```
+- 사용자가 클릭하기 전에 미리 DNS 조회를 수행
+- 특히 외부 도메인 리소스가 많은 경우 효과적
+- 예: CDN, 폰트, 이미지 서버 등에 적용
+
+2. DNS 캐싱 최적화
+- Browser DNS Cache: 브라우저 레벨의 DNS 캐시
+- OS DNS Cache: 운영체제 레벨의 DNS 캐시
+- DNS TTL(Time To Live) 값 최적화
+  - 너무 짧으면 잦은 조회 발생
+  - 너무 길면 DNS 변경 시 문제 발생
+
+1. DNS 리졸버 최적화
+- ISP DNS 서버 성능 모니터링
+- Public DNS 활용 (예: Google DNS, Cloudflare DNS)
+- DNS 서버 지역성 고려
+
+2. Resource Hints 활용
+```html
+<!-- DNS Prefetch -->
+<link rel="dns-prefetch" href="//example.com">
+
+<!-- Preconnect -->
+<link rel="preconnect" href="//example.com">
+
+<!-- Preload -->
+<link rel="preload" href="//example.com/style.css" as="style">
+```
+
+3. 도메인 수 최적화
+- 도메인 샤딩 최소화
+- 필요한 경우 도메인 통합
+- HTTP/2 사용 시 도메인 통합이 더 효과적
+
+4. DNS over HTTPS (DoH) 활용
+- DNS 쿼리의 보안성 강화
+- 일부 상황에서 더 빠른 응답 가능
+
+실제 적용 예시:
+```javascript
+// DNS Prefetch 동적 추가
+const dnsPrefetch = document.createElement('link');
+dnsPrefetch.rel = 'dns-prefetch';
+dnsPrefetch.href = '//example.com';
+document.head.appendChild(dnsPrefetch);
+
+// Preconnect 추가
+const preconnect = document.createElement('link');
+preconnect.rel = 'preconnect';
+preconnect.href = '//example.com';
+document.head.appendChild(preconnect);
+```
+
+성능 측정 방법:
+5. Navigation Timing API 활용
+```javascript
+const timing = performance.timing;
+const dnsTime = timing.domainLookupEnd - timing.domainLookupStart;
+```
+
+6. Chrome DevTools
+- Network 패널의 DNS Lookup 시간 확인
+- Waterfall 차트 분석
+
+위와 같은 최적화를 통해 얻을 수 있는 이점:
+- 초기 페이지 로드 시간 단축
+- 사용자 체감 성능 향상
+- 네트워크 리소스 효율적 사용
+
+실제 프로젝트에서는 이러한 최적화를 통해 DNS 조회 시간을 50-200ms 정도 단축할 수 있습니다.
+
+면접에서는 이러한 최적화 방법을 실제 프로젝트에서 어떻게 적용했는지, 어떤 성능 향상을 이끌어냈는지 구체적인 예시와 함께 설명하시면 좋을 것 같습니다.

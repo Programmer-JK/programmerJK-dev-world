@@ -1,0 +1,143 @@
+---
+title: "Oracle 임시 LOB과 공간 부족 진단"
+summary: "조각을 이어 붙여 CLOB 한 건을 만드는 프로시저, 해제하지 않은 임시 LOB이 DB를 멈춘 이유, 그리고 공간 문제를 찾는 진단 쿼리."
+date: 2026-10-20
+island: library
+room: backend
+project: finance-orgn
+tags: ["Oracle", "LOB", "DBMS_LOB", "CLOB", "트러블슈팅"]
+---
+
+마이그레이션에서 본문 조각을 임시 테이블에 넣은 뒤, 프로시저로 이어 붙여 CLOB 한 건으로 적재했다. `||`는 PL/SQL 변수 한도(32,767바이트)에 걸려서 `DBMS_LOB`을 썼다.
+
+## LOB 기본
+
+- **CLOB**(문자)·**BLOB**(바이너리). 변수에는 실제 값이 아니라 **로케이터**(위치 포인터)가 들어간다.
+- **영구 LOB**은 테이블 컬럼에 저장된 LOB, **임시 LOB**은 PL/SQL에서 만든 작업용 LOB으로 임시 테이블스페이스를 쓴다.
+- 문자열 한도: SQL `VARCHAR2`는 4,000바이트(확장 시 32,767), PL/SQL 변수는 32,767바이트.
+- 약 4,000바이트를 넘는 LOB은 행 밖 LOB 세그먼트에 저장된다. 테이블 용량과 LOB 용량은 따로 봐야 한다.
+
+| 함수 | 역할 |
+|---|---|
+| `CREATETEMPORARY(lob, cache, dur)` | 임시 LOB 생성. `cache = TRUE`면 버퍼 캐시 사용 |
+| `APPEND(dest, src)` | LOB 뒤에 LOB 붙이기 |
+| `WRITEAPPEND(lob, amount, buffer)` | LOB 뒤에 VARCHAR2 버퍼 붙이기 |
+| `GETLENGTH(lob)` | 길이 (CLOB은 문자 수, BLOB은 바이트 수) |
+| `SUBSTR(lob, amount, offset)` | 부분 읽기. 인자 순서가 SQL `SUBSTR`과 다르다 |
+| `ISTEMPORARY(lob)` | 임시 LOB이면 1 |
+| `FREETEMPORARY(lob)` | 임시 LOB 해제 |
+
+## 조각을 이어 붙여 한 건으로
+
+```sql
+CREATE OR REPLACE PROCEDURE SP_MIG_RECORD (
+  p_file_name IN  VARCHAR2,
+  p_org_id    IN  NUMBER,
+  p_record_id OUT NUMBER
+) IS
+  v_content CLOB;
+BEGIN
+  DBMS_LOB.CREATETEMPORARY(v_content, TRUE, DBMS_LOB.CALL);
+
+  FOR l IN (SELECT CONTENT FROM MIG_TMP
+             WHERE FILE_NAME = p_file_name ORDER BY LINE_NO)
+  LOOP
+    IF l.CONTENT IS NOT NULL AND DBMS_LOB.GETLENGTH(l.CONTENT) > 0 THEN
+      DBMS_LOB.APPEND(v_content, l.CONTENT);
+    END IF;
+  END LOOP;
+
+  IF DBMS_LOB.GETLENGTH(v_content) = 0 THEN
+    RAISE_APPLICATION_ERROR(-20002, '임시 테이블에 내용 없음: ' || p_file_name);
+  END IF;
+
+  SELECT S_RECORD.NEXTVAL INTO p_record_id FROM DUAL;
+  INSERT INTO RECORD (RECORD_ID, ORG_ID, REG_DATE, CONTENTS)
+  VALUES (p_record_id, p_org_id, SYSDATE, v_content);
+
+  DELETE FROM MIG_TMP WHERE FILE_NAME = p_file_name;
+  -- 커밋은 호출한 쪽(Java)에서 파일 단위로
+END;
+/
+```
+
+- 선언만 한 CLOB 변수는 NULL이라 APPEND할 수 없다. 먼저 `CREATETEMPORARY`로 만든다.
+- `ORDER BY LINE_NO` — 조각 순서가 곧 본문 순서다.
+- 합친 길이가 0이면 중단해서, 적재에 실패한 파일을 빈 기록으로 만들지 않는다.
+- INSERT 순간 임시 LOB 내용이 테이블의 영구 LOB으로 복사된다. 그 뒤 임시 LOB은 필요 없다 — **해제 대상**이다.
+
+## DB 서버가 내려간 이유
+
+이 프로시저에는 해제가 없었다. 마이그레이션을 반복하던 중 Oracle 서버가 다운됐고, 원인은 **해제되지 않고 캐시에 쌓인 임시 LOB**이었다.
+
+| 유지 기간 | 자동 정리 시점 | FREETEMPORARY |
+|---|---|---|
+| `DBMS_LOB.SESSION` (기본값) | 세션 종료 시 — 커넥션 풀에서는 사실상 정리되지 않음 | 필수 |
+| `DBMS_LOB.CALL` | 클라이언트의 최상위 호출이 끝날 때 | 권장 |
+
+- `CALL`이어도 호출이 끝나기 전까지 임시 공간과 버퍼 캐시를 차지한다. 파일 하나가 수백 MB면 부담이 크다.
+- 다른 PL/SQL 반복문 안에서 부르면 바깥 호출이 끝날 때까지 정리되지 않는다.
+- Java에서 큰 CLOB을 `setCharacterStream`·`createClob()`으로 다루면 드라이버·세션 쪽에도 임시 LOB이 생길 수 있다.
+
+보완한 해제 부분:
+
+```sql
+  DELETE FROM MIG_TMP WHERE FILE_NAME = p_file_name;
+  DBMS_LOB.FREETEMPORARY(v_content);       -- 사용이 끝난 임시 LOB 해제
+EXCEPTION
+  WHEN OTHERS THEN
+    IF DBMS_LOB.ISTEMPORARY(v_content) = 1 THEN
+      DBMS_LOB.FREETEMPORARY(v_content);   -- 예외 경로에서도 해제
+    END IF;
+    RAISE;                                 -- 원래 오류는 그대로
+END;
+```
+
+## 211장에서 멈춘 이유 — Resumable 공간 할당
+
+공간이 부족하면 Oracle은 바로 오류를 내지 않고 문장을 **일시 정지**(`statement suspended, wait error to be cleared`)시켰다가 공간이 늘면 이어서 실행한다. 제한 시간(`RESUMABLE_TIMEOUT`)이 지나면 원래 오류(`ORA-01653` 등)로 실패한다. 그동안 클라이언트는 그냥 멈춘 것처럼 보인다.
+
+중간에 끄면 롤백되어 공간이 비고, 다시 돌리면 같은 지점에서 멈춘다. **나눠서 커밋해도 총량은 같다.** 해결은 `TRUNCATE`로 공간 반납 → 증설 요청 → 이미지 축소였다.
+
+## 진단 쿼리
+
+```sql
+-- 멈춘 세션이 무엇을 하는지
+SELECT s.SID, s.STATUS, s.EVENT, s.SECONDS_IN_WAIT, s.BLOCKING_SESSION, q.SQL_TEXT
+FROM V$SESSION s
+LEFT JOIN V$SQL q ON q.SQL_ID = s.SQL_ID AND q.CHILD_NUMBER = s.SQL_CHILD_NUMBER
+WHERE s.PROGRAM LIKE '%JDBC%';
+
+-- 정지된 문장과 오류 / 남은 공간 / 큰 세그먼트
+SELECT STATUS, ERROR_NUMBER, ERROR_MSG, SUSPEND_TIME FROM USER_RESUMABLE;
+SELECT TABLESPACE_NAME, ROUND(SUM(BYTES)/1024/1024) AS FREE_MB
+FROM USER_FREE_SPACE GROUP BY TABLESPACE_NAME;
+SELECT SEGMENT_NAME, SEGMENT_TYPE, ROUND(BYTES/1024/1024) AS MB
+FROM USER_SEGMENTS ORDER BY BYTES DESC;
+
+-- CLOB이 실제로 저장된 테이블스페이스
+SELECT TABLE_NAME, COLUMN_NAME, TABLESPACE_NAME FROM USER_LOBS;
+
+-- 세션별 임시 LOB이 계속 늘어나는지
+SELECT s.sid, s.program, l.cache_lobs, l.nocache_lobs
+FROM v$temporary_lobs l JOIN v$session s ON s.sid = l.sid
+ORDER BY l.cache_lobs + l.nocache_lobs DESC;
+
+-- "created with warning" 컴파일 오류
+SELECT LINE, POSITION, TEXT FROM USER_ERRORS
+WHERE NAME = 'SP_MIG_RECORD' ORDER BY SEQUENCE;
+```
+
+- 이벤트가 "statement suspended…"면 공간 문제다.
+- `V$TEMPORARY_LOBS`의 수가 작업 중 계속 늘기만 하면 해제 누락이다.
+
+## 정리
+
+- 임시 LOB은 **생성과 해제를 예외 경로까지 한 쌍**으로 관리한다.
+- `ORA-01691`·`01653`은 공간 부족, `01536`은 quota 초과.
+- `TRUNCATE`는 공간을 바로 반납하지만, `DELETE`한 CLOB 공간은 한동안 재사용되지 않는다.
+- 장애 경위는 [유적 기록](/posts/orgn-migration-postmortem)에 있다.
+
+---
+
+> [인사·조직 시스템 고도화 프로젝트](/posts/orgn-project)에서 실제로 작성·디버깅한 코드를 바탕으로 정리했다. 테이블과 컬럼 이름은 일반화했다.

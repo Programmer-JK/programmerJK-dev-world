@@ -1,0 +1,57 @@
+---
+title: "XCP-NG 가상화 플랫폼"
+summary: "XCP-NG의 기본 개념, 주요 기능, 새로운 기능 및 시스템 구조 설명"
+date: 2024-12-03
+island: library
+room: devops
+tags: ["virtualization", "xcp-ng", "hypervisor", "server-virtualization", "virtual-machines", "system-administration"]
+---
+### 기본 개념
+
+- XenServer 기반의 오픈소스 가상화 플랫폼
+- Citrix의 유료 기능들을 무료로 제공
+- 서버 및 워크스테이션 가상화 지원
+
+### 주요 기능
+
+1. 기본 인프라
+   - Xen Orchestra 기반 관리 인터페이스
+   - 무제한 확장성 지원
+   - 클러스터링 기능
+2. 가상 머신 관리
+   - 실시간 마이그레이션 (XenMotion)
+   - 스냅샷 지원
+   - 고가용성 보장
+   - 클러스터 간 VM 이동
+3. 스토리지 기능
+   - 다양한 스토리지 시스템 지원
+   - 실시간 디스크 마이그레이션
+   - ZFS 파일시스템 지원
+
+### XCP-NG 8.0 새로운 기능
+
+1. 시스템 개선
+   - Linux 커널 4.19 적용
+   - Xen 4.11 하이퍼바이저
+   - CentOS 7.5 기반 업데이트
+2. 보안 강화
+   - Intel MDS 공격 방어
+   - RPM 패키지 디지털 서명 확인
+   - UEFI 모드 지원
+3. 관리 도구
+   - 위치 기반 yum 미러 선택
+   - cryptsetup, htop 등 기본 패키지 추가
+   - Emu-manager C언어 재작성
+
+### 시스템 구조
+
+1. 하이퍼바이저 계층
+   - Xen 하이퍼바이저 (하드웨어 가상화)
+2. 관리 계층 (XCP-ng)
+   - 시스템 관리 도구
+   - 스토리지/네트워크 관리
+   - API 서비스
+3. 인터페이스 계층
+   - XCP-ng Center
+   - Xen Orchestra
+   - CLI 도구

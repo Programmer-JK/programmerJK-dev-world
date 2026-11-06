@@ -1,0 +1,141 @@
+---
+title: "물류 센터 로봇 충돌 문제"
+date: 2024-12-04
+island: library
+room: algo
+tags: []
+---
+## 문제 설명
+
+물류 센터에서 여러 대의 로봇이 동시에 운송 작업을 수행할 때, 발생할 수 있는 충돌(같은 위치에 2대 이상의 로봇이 있는 경우) 횟수를 계산하는 문제입니다.
+
+### 로봇 이동 규칙
+
+1. 모든 로봇은 0초에 동시 출발
+2. 1초당 한 칸씩 이동 (r 또는 c 좌표가 1 변화)
+3. 최단 경로로 이동 (r 좌표 변화 우선)
+4. 마지막 포인트 도착 시 작업 종료
+
+## 제한 조건
+
+1. points 배열
+
+   - 크기: 2 ≤ n ≤ 100
+   - 좌표 범위: 1 ≤ r,c ≤ 100
+   - 중복 좌표 없음
+
+2. routes 배열
+   - 로봇 수: 2 ≤ x ≤ 100
+   - 경로 길이: 2 ≤ m ≤ 100
+   - 연속 중복 방문 없음
+
+## 해결 코드
+
+```javascript
+function solution(points, routes) {
+  let answer = 0;
+  let robots_history = [];
+  let robotsNum = routes.length;
+
+  // 두 지점 사이의 이동 경로 계산
+  const moveCheck = (startR, startC, targetR, targetC) => {
+    let curR = startR;
+    let curC = startC;
+    let temp = [];
+    while (curR != targetR) {
+      if (curR > targetR) temp.push([--curR, curC]);
+      else temp.push([++curR, curC]);
+    }
+    while (curC != targetC) {
+      if (curC > targetC) temp.push([curR, --curC]);
+      else temp.push([curR, ++curC]);
+    }
+    return temp;
+  };
+
+  // 각 로봇의 전체 이동 경로 계산
+  for (let i = 0; i < routes.length; i++) {
+    let temp = [points[routes[i][0] - 1]];
+    for (let k = 1; k < routes[i].length; k++) {
+      const [startR, startC] = points[routes[i][k - 1] - 1];
+      const [targetR, targetC] = points[routes[i][k] - 1];
+      temp.push(...moveCheck(startR, startC, targetR, targetC));
+    }
+    robots_history.push([...temp]);
+  }
+
+  // 충돌 검사
+  for (let i = 0; i < robots_history[0].length; i++) {
+    let crush = [];
+    for (let k = 0; k < robotsNum; k++) {
+      for (let j = 0; j < robotsNum; j++) {
+        if (k == j) continue;
+        if (
+          robots_history[k][i] &&
+          robots_history[j][i] &&
+          robots_history[k][i][0] == robots_history[j][i][0] &&
+          robots_history[k][i][1] == robots_history[j][i][1]
+        ) {
+          const alreadyCrush = crush.some((point) => {
+            const [r1, c1] = point;
+            const [r2, c2] = robots_history[k][i];
+            return r1 === r2 && c1 === c2;
+          });
+          if (!alreadyCrush) {
+            crush.push(robots_history[k][i]);
+          }
+        }
+      }
+    }
+    answer += crush.length;
+  }
+  return answer;
+}
+```
+
+## 알고리즘 설명
+
+1. 이동 경로 생성
+
+```javascript
+const moveCheck = (startR, startC, targetR, targetC) => {
+  // r 좌표 이동
+  while (curR != targetR) {
+    if (curR > targetR) temp.push([--curR, curC]);
+    else temp.push([++curR, curC]);
+  }
+  // c 좌표 이동
+  while (curC != targetC) {
+    if (curC > targetC) temp.push([curR, --curC]);
+    else temp.push([curR, ++curC]);
+  }
+};
+```
+
+2. 충돌 검사
+
+```javascript
+// 같은 시간대에 같은 위치에 있는 로봇 쌍 찾기
+if(robots_history[k][i] && robots_history[j][i] &&
+   robots_history[k][i][0] == robots_history[j][i][0] &&
+   robots_history[k][i][1] == robots_history[j][i][1])
+```
+
+## 구현 포인트
+
+1. 좌표 이동 순서
+
+   - r 좌표 먼저 조정
+   - c 좌표 나중에 조정
+
+2. 중복 충돌 처리
+   - 같은 위치의 충돌은 한 번만 카운트
+   - some() 메서드로 중복 체크
+
+## 시간 복잡도
+
+- O(R _ T _ R²): R은 로봇 수, T는 최대 이동 시간
+
+## 공간 복잡도
+
+- O(R \* T): 각 로봇의 전체 이동 경로 저장

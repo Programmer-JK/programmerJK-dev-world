@@ -1,0 +1,19 @@
+---
+title: "특정 사용 port 죽이는 법"
+summary: "웹 서버 및 애플리케이션 실행 시 포트 충돌 해결 방법"
+date: 2024-10-18
+island: library
+room: devops
+tags: ["network", "troubleshooting", "server-management", "port-management", "system-administration"]
+---
+웹 서버를 구동하다보면 특정 port가 죽지않고 살아 아래와 같은 오류를 나타낼 때가 있다. 
+ >Address localhost:3000 is already in use.
+
+```
+# 원하는 포트 조회
+$ netstat -ano | findstr :3000
+
+# 해당 포트 죽이기
+$ taskkill /f /pid '원하는 pid 번호'
+
+```

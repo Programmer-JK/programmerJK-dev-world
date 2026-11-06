@@ -1,0 +1,114 @@
+---
+title: "게임 맵 최단거리"
+date: 2024-12-01
+island: library
+room: algo
+tags: []
+---
+## [게임 맵 최단거리 (L2)](https://school.programmers.co.kr/learn/courses/30/lessons/1844)
+
+## 문제 설명
+
+ROR 게임은 두 팀으로 나누어서 진행하며, 상대 팀 진영을 먼저 파괴하면 이기는 게임입니다. 각 팀은 상대 팀 진영에 최대한 빨리 도착하는 것이 유리합니다.
+게임은 5 x 5 크기의 맵에서 진행되며:
+
+- 캐릭터의 시작 위치: (행: 1, 열: 1)
+- 상대 팀 진영 위치: (행: 5, 열: 5)
+
+### 맵 구성
+
+- 검은색 부분: 벽으로 막혀있어 갈 수 없는 길
+- 흰색 부분: 갈 수 있는 길
+- 이동 방향: 동, 서, 남, 북 방향으로 한 칸씩
+- 게임 맵 밖으로는 이동 불가
+
+## 제한 조건
+
+1. maps는 n x m 크기의 2차원 배열
+
+   - n과 m은 각각 1 이상 100 이하의 자연수
+   - n과 m이 모두 1인 경우는 입력으로 주어지지 않음
+
+2. maps 구성
+
+   - 0: 벽이 있는 자리
+   - 1: 벽이 없는 자리
+
+3. 위치 정보
+   - 시작 위치: 좌측 상단 (1, 1)
+   - 도착 위치: 우측 하단 (n, m)
+
+## 해결 코드
+
+```javascript
+function solution(maps) {
+  let answer = -1;
+  let moveCount = 0;
+  let queue = [];
+  let visited = [...maps];
+  const moveX = [1, -1, 0, 0];
+  const moveY = [0, 0, 1, -1];
+  const maxX = maps[0].length - 1;
+  const maxY = maps.length - 1;
+
+  queue.push([0, 0]);
+  visited[0][0] = 0;
+  while (queue.length > 0) {
+    moveCount++;
+    let size = queue.length;
+    for (let i = 0; i < size; i++) {
+      let [curX, curY] = queue.shift();
+      for (let k = 0; k < 4; k++) {
+        let nextX = curX + moveX[k];
+        let nextY = curY + moveY[k];
+
+        if (nextX == maxX && nextY == maxY) return ++moveCount;
+
+        if (nextX <= maxX && nextX >= 0 && nextY <= maxY && nextY >= 0) {
+          if (visited[nextY][nextX]) {
+            queue.push([nextX, nextY]);
+            visited[nextY][nextX] = 0;
+          }
+        }
+      }
+    }
+  }
+
+  return answer;
+}
+```
+
+## 주요 로직 설명
+
+1. BFS(너비 우선 탐색) 알고리즘 사용
+2. queue를 활용하여 이동 가능한 위치를 저장하고 탐색
+3. visited 배열로 방문한 위치 체크
+4. 동서남북 4방향 이동 좌표 계산
+5. 목표 지점 도달 시 이동 횟수 반환
+6. 도달 불가능한 경우 -1 반환
+
+## 핵심 문법 요소
+
+1. 배열 구조 분해
+
+```javascript
+let [curX, curY] = queue.shift();
+```
+
+2. 스프레드 연산자를 활용한 배열 복사
+
+```javascript
+let visited = [...maps];
+```
+
+3. BFS를 위한 queue 활용
+
+```javascript
+queue.push([nextX, nextY]);
+```
+
+4. 2차원 배열 접근
+
+```javascript
+visited[nextY][nextX];
+```

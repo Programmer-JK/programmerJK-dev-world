@@ -1,0 +1,100 @@
+---
+title: "안전한 쿠키 설정"
+date: 2025-01-12
+island: library
+room: arch
+tags: []
+---
+웹 애플리케이션에서 쿠키를 안전하게 관리하는 것은 매우 중요한 보안 요소입니다. 특히 사용자 인증 정보나 세션 관리에 사용되는 쿠키는 더욱 철저한 보안이 필요합니다. 이번 글에서는 쿠키 설정의 보안 위험성과 이를 예방하기 위한 최선의 방법에 대해 알아보겠습니다.
+
+## JavaScript로 쿠키를 설정할 때의 위험성
+
+웹 개발을 하다 보면 `document.cookie`를 통해 클라이언트 측에서 쿠키를 설정하는 경우가 있습니다. 하지만 이 방식은 심각한 보안 위험을 초래할 수 있습니다.
+
+```javascript
+// 취약한 방식의 예
+document.cookie = "userToken=abc123";
+```
+
+이러한 방식은 XSS(Cross-Site Scripting) 공격에 매우 취약합니다. 공격자가 웹사이트에 악성 스크립트를 주입하는데 성공하면, `document.cookie`를 통해 모든 쿠키 정보를 탈취할 수 있게 됩니다.
+
+## 서버 측 쿠키 설정: 더 안전한 방법
+
+이러한 보안 위험을 방지하기 위해, 쿠키는 서버 측에서 `Set-Cookie` HTTP 헤더를 통해 설정하는 것이 권장됩니다.
+
+```http
+Set-Cookie: sessionId=abc123; HttpOnly; Secure; SameSite=Strict; Path=/; Domain=example.com
+```
+
+### 주요 보안 플래그
+
+1. **HttpOnly**
+   - JavaScript를 통한 쿠키 접근을 완전히 차단
+   - XSS 공격으로부터 쿠키 보호
+   
+2. **Secure**
+   - HTTPS 연결에서만 쿠키 전송
+   - 중간자 공격 방지
+
+3. **SameSite**
+   - CSRF(Cross-Site Request Forgery) 공격 방지
+   - 옵션: Strict, Lax, None
+
+4. **Domain과 Path**
+   - 쿠키의 유효 범위를 특정 도메인과 경로로 제한
+   - 불필요한 쿠키 노출 방지
+
+## 실제 구현 예시
+
+### Node.js Express 서버에서의 구현
+
+```javascript
+app.post('/login', (req, res) => {
+  // 로그인 로직 처리 후...
+  res.cookie('sessionId', 'abc123', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'strict',
+    path: '/',
+    domain: 'example.com'
+  });
+  res.json({ success: true });
+});
+```
+
+### Python Flask 서버에서의 구현
+
+```python
+@app.route('/login', methods=['POST'])
+def login():
+    # 로그인 로직 처리 후...
+    response = make_response(jsonify({'success': True}))
+    response.set_cookie(
+        'sessionId',
+        'abc123',
+        httponly=True,
+        secure=True,
+        samesite='Strict',
+        path='/',
+        domain='example.com'
+    )
+    return response
+```
+
+## 쿠키 보안의 모범 사례
+
+1. 중요한 인증 정보는 반드시 HttpOnly 플래그를 사용하여 설정
+
+2. 가능한 한 모든 쿠키에 Secure 플래그를 설정하여 HTTPS 통신 강제
+
+3. SameSite 속성을 활용하여 CSRF 공격 방지
+
+4. 쿠키에 저장되는 값은 가능한 한 암호화하여 저장
+
+5. 필요한 경우에만 최소한의 유효기간 설정
+
+## 결론
+
+웹 애플리케이션에서 쿠키를 안전하게 관리하는 것은 보안의 기본입니다. `document.cookie`를 통한 클라이언트 측 쿠키 설정은 피하고, 서버 측에서 적절한 보안 플래그와 함께 설정하는 것이 좋습니다. 이를 통해 XSS, CSRF 등 다양한 웹 보안 위협으로부터 사용자 데이터를 보호할 수 있습니다.
+
+쿠키 보안은 계속해서 발전하고 있는 분야입니다. 최신 보안 동향을 주시하고, 필요에 따라 보안 설정을 업데이트하는 것이 중요합니다.

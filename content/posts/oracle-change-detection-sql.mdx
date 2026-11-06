@@ -1,0 +1,138 @@
+---
+title: "Oracle 변경 감지 SQL: NULL까지 비교하고 UNPIVOT으로 펼치기"
+summary: "저장해 둔 시뮬레이션 결과와 원본이 달라졌는지 찾는 SQL. CTE, DECODE, NOT EXISTS, 짝 UNPIVOT."
+date: 2026-10-06
+island: library
+room: backend
+project: finance-orgn
+tags: ["Oracle", "SQL", "DECODE", "UNPIVOT", "CTE"]
+---
+
+시뮬레이션 결과를 저장한 뒤, 원본 데이터(공석·자원·이동시간)가 바뀌었는지 찾아 버튼·배너·팝업·셀 강조로 보여주는 기능을 만들었다. "두 상태를 비교해 차이를 분류하는" SQL이다.
+
+## 무엇을 감지하나
+
+| # | 대상 | 유형 | 감지 방법 |
+|---|---|---|---|
+| 1 | 이동시간 | 수정 | 저장값 vs 현재값 |
+| 2·3 | 공석 / 자원 | 수정 | 결과에 함께 저장한(역정규화) 컬럼과 원본 비교 |
+| 4·5 | 공석 | 삭제·추가 | 시뮬레이션에만 있음 / 원본에만 있음 |
+| 6·7 | 자원 | 삭제·추가 | 대상자에만 있음 / 원본에만 있음 |
+
+먼저 정한 세 가지 원칙:
+
+- **비교 기준일 = 시뮬레이션 기준일.** 최신 스냅샷과 비교하면 날짜 차이까지 변경으로 잡힌다.
+- **SQL 하나로 배너·팝업·셀 강조를 모두 만든다.** 건수 쿼리를 따로 두면 숫자가 어긋난다.
+- **이동시간은 자원 1행으로 요약**하고, 클릭할 때만 상세 SQL을 부른다.
+
+## 공통 CTE — 바인드는 한 곳에서
+
+```sql
+WITH PARAM AS (                    -- 바인드는 여기서만 받는다
+  SELECT CAST(:SIM_ID AS NUMBER) AS SIM_ID FROM DUAL
+),
+BASE AS (                          -- 시뮬레이션 기준일 (반드시 1행)
+  SELECT S.BASE_YMD FROM SIMULATION S
+  JOIN PARAM K ON S.SIM_ID = K.SIM_ID
+),
+CUR_VAC AS (                       -- 기준일의 공석 원본
+  SELECT V.VACANCY_ID, V.ORG_ID, V.GRADE, V.GENDER, V.JOB
+  FROM VACANCY V
+  WHERE V.BASE_YMD = (SELECT BASE_YMD FROM BASE)
+),
+SAV_VAC AS (                       -- 결과에 저장된 공석값 (공석당 1건)
+  SELECT DISTINCT R.VACANCY_ID, R.ORG_ID, R.VAC_GRADE, R.VAC_GENDER, R.VAC_JOB
+  FROM SIM_RESULT R
+  JOIN PARAM K ON R.SIM_ID = K.SIM_ID
+)
+```
+
+- `CAST(:SIM_ID AS NUMBER)`로 바인드 타입을 고정한다. 문자로 들어와도 숫자 컬럼 쪽에 변환이 걸리지 않는다.
+- **PARAM CTE 패턴**: `SELECT :바인드 FROM DUAL`로 한 번 받고 본문에서 `JOIN PARAM K ON 1 = 1`로 붙인다. DUAL은 항상 1행이라 행이 곱해지지 않는다. 반대로 PARAM이 1행이 아니게 되면 결과가 통째로 곱해진다 — [실제로 겪었다](/posts/oracle-xplan-duplicate-diagnosis).
+- 기준일은 조인 대신 `(SELECT BASE_YMD FROM BASE)` 스칼라 서브쿼리로 받아 상수 조건처럼 동작시킨다.
+
+## NULL까지 비교하기 — DECODE
+
+SQL의 `=`·`<>`는 한쪽이라도 NULL이면 UNKNOWN이 되어 WHERE에서 걸러진다. `a <> b`로는 "값 → NULL"로 바뀐 변경을 놓친다.
+
+```sql
+a <> b               -- a = 1, b = NULL → UNKNOWN → 변경 누락
+DECODE(a, b, 0, 1)   -- 같으면 0, 다르면 1 (NULL끼리 같음, 값↔NULL은 다름)
+-- 표준 SQL로는
+CASE WHEN a = b OR (a IS NULL AND b IS NULL) THEN 0 ELSE 1 END
+```
+
+컬럼마다 `DECODE`를 더해 0보다 크면 "하나라도 바뀐 행"이다. OR을 늘어놓는 것보다 컬럼 추가가 한 줄로 끝난다.
+
+```sql
+SELECT COUNT(*) AS CNT
+FROM SAV_VAC S
+JOIN VACANCY V ON V.VACANCY_ID = S.VACANCY_ID
+              AND V.BASE_YMD = (SELECT BASE_YMD FROM BASE)
+WHERE DECODE(S.ORG_ID,     V.ORG_ID, 0, 1)
+    + DECODE(S.VAC_GRADE,  V.GRADE,  0, 1)
+    + DECODE(S.VAC_GENDER, V.GENDER, 0, 1)
+    + DECODE(S.VAC_JOB,    V.JOB,    0, 1) > 0;
+```
+
+`DECODE`는 비교 전에 값을 첫 번째 검색값의 타입으로 맞춘다. 문자와 숫자가 섞이면 변환 오류가 날 수 있다.
+
+## 추가·삭제 — NOT EXISTS
+
+"원본에 있는데 시뮬레이션에 없다"는 안티 조인이다. `EXISTS`는 첫 행을 찾으면 멈추고 행을 곱하지 않는다.
+
+```sql
+-- 자원 추가: 기준일 원본에 있는데 이 시뮬레이션 대상자에는 없는 사람
+SELECT '추가', '자원', E.EMP_NO
+FROM CUR_EMP E
+WHERE NOT EXISTS (SELECT 1 FROM SIM_TARGET T
+                  WHERE T.EMP_NO = E.EMP_NO
+                    AND T.SIM_ID = (SELECT SIM_ID FROM PARAM));
+```
+
+`NOT IN (서브쿼리)`는 서브쿼리 결과에 NULL이 하나라도 있으면 아무 행도 반환하지 않는다. 그래서 `NOT EXISTS`를 쓴다.
+
+## 상세 팝업 — 짝 UNPIVOT
+
+여러 컬럼을 `(항목명, 이전 값, 새 값)` 행으로 세우면 팝업에 그대로 뿌릴 수 있다.
+
+```sql
+UNPIVOT INCLUDE NULLS (
+  (OLD_VAL, NEW_VAL) FOR ITEM IN (
+    (V_O1, V_N1) AS '공석|직급',
+    (V_O2, V_N2) AS '공석|성별',
+    (E_O1, E_N1) AS '자원|연수원성적'
+  )
+)
+-- 바깥에서
+SELECT SUBSTR(ITEM, 1, INSTR(ITEM, '|') - 1) AS GUBUN,
+       SUBSTR(ITEM, INSTR(ITEM, '|') + 1)    AS ITEM_NM,
+       OLD_VAL, NEW_VAL
+...
+WHERE DECODE(OLD_VAL, NEW_VAL, 0, 1) = 1;
+```
+
+- UNPIVOT 별칭에는 값 하나만 줄 수 있어서 `'구분|항목'` 문자열로 붙인 뒤 바깥에서 나눴다.
+- 기본값은 `EXCLUDE NULLS`라 값이 전부 NULL인 행이 사라진다. 의도를 분명히 하려고 `INCLUDE NULLS`를 썼다.
+- 같은 자리 컬럼은 타입이 같아야 한다. 아니면 `ORA-01790`. 숫자는 `TO_CHAR`로 맞춘다.
+
+이동시간 상세는 변동 폭이 큰 순으로 정렬했다.
+
+```sql
+ORDER BY ABS(NVL(NEW_MIN, 0) - NVL(OLD_MIN, 0)) DESC
+```
+
+## 건수와 상세 숫자가 안 맞았던 이유
+
+건수 쿼리는 원본 타입으로, 상세 쿼리는 `TRIM(TO_CHAR(...))` 문자열로 비교하고 있었다. `TO_CHAR(0.5)`는 `'.5'`이고 CHAR 패딩도 차이를 만든다. **두 쿼리의 비교식을 글자까지 일치**시키고 나서야 숫자가 맞았다.
+
+## 정리
+
+- 비교 SQL은 **비교 키와 기준일**부터 정한다.
+- NULL까지 비교하려면 `DECODE(a, b, 0, 1)`.
+- 추가·삭제는 `NOT EXISTS`, `NOT IN`은 NULL 함정이 있다.
+- UNPIVOT은 타입 통일, `INCLUDE NULLS`, 원본 1행.
+
+---
+
+> [인사·조직 시스템 고도화 프로젝트](/posts/orgn-project)에서 실제로 작성·디버깅한 코드를 바탕으로 정리했다. 테이블과 컬럼 이름은 일반화했다.

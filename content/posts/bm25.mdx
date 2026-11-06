@@ -1,0 +1,376 @@
+---
+title: "BM25: 키워드 검색은 어떻게 점수를 매기나"
+date: 2025-10-28
+island: library
+room: ai
+tags: ["BM25", "Search", "RAG"]
+---
+## 🎯 BM25란 무엇인가?
+
+**BM25 (Best Matching 25)**는 정보 검색에서 가장 널리 사용되는 **키워드 기반 검색 알고리즘**입니다. "25"는 이 알고리즘이 25번째 버전이라는 뜻이 아니라, Okapi BM25 시스템에서 유래된 이름입니다.
+
+### 📚 핵심 개념
+
+- **TF-IDF의 개선된 버전**
+- **확률적 정보 검색 모델**
+- **키워드 빈도와 문서 길이를 고려한 스코어링**
+
+---
+
+## 🤖 Vector Search vs BM25
+
+현재 우리가 사용하고 있는 **Vector Search(의미 기반 검색)**과 **BM25(키워드 기반 검색)**의 차이점을 알아보겠습니다.
+
+### 🔄 Vector Search (FAISS, ChromaDB)
+
+```python
+# 의미 기반 검색 예시
+query = "강아지가 좋아하는 음식"
+# → 임베딩 벡터로 변환
+# → 코사인 유사도로 검색
+
+결과: "반려동물 사료", "개 간식", "펫푸드" 등
+# 직접적인 키워드가 없어도 의미가 유사한 문서 검색 가능
+```
+
+### 🔍 BM25 (키워드 기반 검색)
+
+```python
+# 키워드 기반 검색 예시  
+query = "강아지가 좋아하는 음식"
+# → 단어 분리: ["강아지", "좋아하는", "음식"]
+# → 각 단어의 출현 빈도 계산
+
+결과: "강아지"와 "음식"이 많이 등장하는 문서들
+# 정확한 키워드 매칭에 강함
+```
+
+---
+
+## 📊 BM25 수식 이해하기
+
+### 기본 수식
+
+```bash
+BM25(D, Q) = Σ IDF(qi) × (tf(qi,D) × (k1 + 1)) / (tf(qi,D) + k1 × (1 - b + b × |D|/avgdl))
+```
+
+### 수식 구성 요소
+
+#### 1. **TF (Term Frequency)** - 단어 빈도
+
+```python
+tf(qi, D) = 문서 D에서 단어 qi가 나타나는 횟수
+
+# 예시
+문서: "강아지가 좋다. 강아지는 귀엽다. 강아지 사랑해"
+tf("강아지") = 3번
+tf("좋다") = 1번
+```
+
+#### 2. **IDF (Inverse Document Frequency)** - 역문서 빈도
+
+```python
+IDF(qi) = log((N - df(qi) + 0.5) / (df(qi) + 0.5))
+
+# N: 전체 문서 수
+# df(qi): 단어 qi가 포함된 문서 수
+
+# 예시: 전체 문서 1000개 중
+IDF("강아지") = log((1000 - 50 + 0.5) / (50 + 0.5)) = 높은 값
+IDF("그리고") = log((1000 - 800 + 0.5) / (800 + 0.5)) = 낮은 값
+```
+
+#### 3. **문서 길이 정규화**
+
+```python
+|D| = 현재 문서의 길이
+avgdl = 전체 문서의 평균 길이
+
+# 짧은 문서에서 키워드가 나오면 더 높은 점수
+# 긴 문서에서는 상대적으로 점수 조정
+```
+
+#### 4. **조정 파라미터**
+
+```python
+k1 = 1.2 (일반적)  # TF 포화도 조절
+b = 0.75 (일반적)  # 문서 길이 정규화 강도
+```
+
+---
+
+## 🧮 BM25 계산 예시
+
+### 예제 데이터
+
+```python
+문서들 = [
+    "강아지가 좋아하는 음식은 사료다",      # 문서 1 (7단어)
+    "고양이도 음식을 좋아한다",              # 문서 2 (5단어)  
+    "강아지 사료는 영양가가 높다",           # 문서 3 (5단어)
+    "음식은 생명의 근원이다"                 # 문서 4 (4단어)
+]
+
+쿼리 = "강아지 음식"
+```
+
+### 1단계: TF 계산
+
+```python
+# 문서 1: "강아지가 좋아하는 음식은 사료다"
+tf("강아지", 문서1) = 1
+tf("음식", 문서1) = 1
+
+# 문서 2: "고양이도 음식을 좋아한다"  
+tf("강아지", 문서2) = 0
+tf("음식", 문서2) = 1
+
+# 문서 3: "강아지 사료는 영양가가 높다"
+tf("강아지", 문서3) = 1
+tf("음식", 문서3) = 0
+```
+
+### 2단계: IDF 계산
+
+```python
+# "강아지"가 포함된 문서: 문서1, 문서3 (2개)
+IDF("강아지") = log((4 - 2 + 0.5) / (2 + 0.5)) = log(2.5/2.5) = 0
+
+# "음식"이 포함된 문서: 문서1, 문서2, 문서4 (3개)  
+IDF("음식") = log((4 - 3 + 0.5) / (3 + 0.5)) = log(1.5/3.5) = -0.85
+```
+
+### 3단계: BM25 스코어 계산
+
+```python
+# 문서 1에 대한 BM25 점수
+# k1=1.2, b=0.75, avgdl=5.25
+
+BM25(문서1, "강아지 음식") = 
+  IDF("강아지") × (1 × 2.2) / (1 + 1.2 × (1 - 0.75 + 0.75 × 7/5.25)) +
+  IDF("음식") × (1 × 2.2) / (1 + 1.2 × (1 - 0.75 + 0.75 × 7/5.25))
+```
+
+---
+
+## 💻 Python으로 BM25 구현하기
+
+### 1. 라이브러리 설치
+
+```bash
+pip install rank-bm25
+```
+
+### 2. 기본 사용법
+
+```python
+from rank_bm25 import BM25Okapi
+import jieba  # 한국어는 konlpy 사용 권장
+
+# 문서 데이터
+documents = [
+    "강아지가 좋아하는 음식은 사료다",
+    "고양이도 음식을 좋아한다", 
+    "강아지 사료는 영양가가 높다",
+    "음식은 생명의 근원이다"
+]
+
+# 토크나이징 (단어 분리)
+tokenized_docs = [doc.split() for doc in documents]
+print("토크나이징 결과:", tokenized_docs)
+
+# BM25 모델 생성
+bm25 = BM25Okapi(tokenized_docs)
+
+# 검색 쿼리
+query = "강아지 음식"
+tokenized_query = query.split()
+
+# 검색 실행
+scores = bm25.get_scores(tokenized_query)
+print("BM25 점수들:", scores)
+
+# 가장 관련성 높은 문서 찾기
+best_docs = bm25.get_top_n(tokenized_query, documents, n=2)
+print("상위 2개 문서:", best_docs)
+```
+
+### 3. LangChain과 통합
+
+```python
+from langchain.retrievers import BM25Retriever
+from langchain.schema import Document
+
+# 문서 객체 생성
+docs = [
+    Document(page_content="강아지가 좋아하는 음식은 사료다", metadata={"source": "pet_guide"}),
+    Document(page_content="고양이도 음식을 좋아한다", metadata={"source": "animal_info"}),
+    Document(page_content="강아지 사료는 영양가가 높다", metadata={"source": "nutrition"}),
+    Document(page_content="음식은 생명의 근원이다", metadata={"source": "philosophy"})
+]
+
+# BM25 Retriever 생성
+bm25_retriever = BM25Retriever.from_documents(docs)
+bm25_retriever.k = 2  # 상위 2개 문서 반환
+
+# 검색 실행
+results = bm25_retriever.get_relevant_documents("강아지 음식")
+for result in results:
+    print(f"문서: {result.page_content}")
+    print(f"소스: {result.metadata['source']}")
+    print("---")
+```
+
+---
+
+## 🎪 BM25 vs Vector Search 비교 실험
+
+### 실험 코드
+
+```python
+# Vector Search (의미 기반)
+vector_results = faiss_db.similarity_search("반려동물 먹이", k=3)
+
+# BM25 Search (키워드 기반)  
+bm25_results = bm25_retriever.get_relevant_documents("반려동물 먹이")
+
+print("=== Vector Search 결과 ===")
+for result in vector_results:
+    print(f"📄 {result.page_content}")
+
+print("\n=== BM25 Search 결과 ===") 
+for result in bm25_results:
+    print(f"📄 {result.page_content}")
+```
+
+### 예상 결과 차이
+
+```python
+쿼리: "반려동물 먹이"
+
+Vector Search 결과:
+✅ "강아지가 좋아하는 음식은 사료다"  # 의미 유사
+✅ "고양이도 음식을 좋아한다"         # 의미 유사
+✅ "강아지 사료는 영양가가 높다"      # 의미 유사
+
+BM25 결과:
+❌ 점수가 낮음 (직접적인 키워드 "반려동물", "먹이" 없음)
+```
+
+---
+
+## 🚀 하이브리드 검색: 최고의 성능
+
+### Vector + BM25 조합
+
+```python
+from langchain.retrievers import EnsembleRetriever
+
+# Vector Retriever 
+vector_retriever = faiss_db.as_retriever(search_kwargs={"k": 3})
+
+# BM25 Retriever
+bm25_retriever = BM25Retriever.from_documents(docs)
+bm25_retriever.k = 3
+
+# 하이브리드 Retriever (앙상블)
+hybrid_retriever = EnsembleRetriever(
+    retrievers=[vector_retriever, bm25_retriever],
+    weights=[0.7, 0.3]  # Vector 70%, BM25 30%
+)
+
+# 검색 실행
+hybrid_results = hybrid_retriever.get_relevant_documents("강아지 음식")
+print("하이브리드 검색 결과:")
+for result in hybrid_results:
+    print(f"📄 {result.page_content}")
+```
+
+---
+
+## 🎯 언제 BM25를 사용할까?
+
+### ✅ BM25가 좋은 경우
+
+- **정확한 키워드 검색**이 중요할 때
+- **전문 용어, 고유명사** 검색
+- **빠른 검색 속도**가 필요할 때
+- **컴퓨팅 자원이 제한적**일 때
+- **투명한 점수 계산**이 필요할 때
+
+### ✅ Vector Search가 좋은 경우
+
+- **의미 기반 검색**이 중요할 때
+- **동의어, 유의어** 처리가 필요할 때
+- **다국어 검색**
+- **문맥 이해**가 중요할 때
+
+### 🏆 하이브리드가 최고인 경우
+
+- **최고의 검색 성능**을 원할 때
+- **다양한 쿼리 유형**에 대응해야 할 때
+- **정확도와 재현율** 모두 중요할 때
+
+---
+
+## 💡 실무 활용 팁
+
+### 1. **한국어 토크나이징**
+
+```python
+from konlpy.tag import Okt
+
+okt = Okt()
+
+def korean_tokenizer(text):
+    return okt.morphs(text)  # 형태소 분석
+
+# BM25에 적용
+tokenized_docs = [korean_tokenizer(doc) for doc in documents]
+bm25 = BM25Okapi(tokenized_docs)
+```
+
+### 2. **매개변수 튜닝**
+
+```python
+# k1: TF 포화도 (일반적으로 1.2~2.0)
+# b: 문서 길이 정규화 (일반적으로 0.75)
+
+bm25 = BM25Okapi(tokenized_docs, k1=1.5, b=0.8)
+```
+
+### 3. **전처리 최적화**
+
+```python
+import re
+
+def preprocess_text(text):
+    # 소문자 변환
+    text = text.lower()
+
+    # 특수문자 제거
+    text = re.sub(r'[^\w\s]', '', text)
+
+    # 불용어 제거 (필요시)
+    stopwords = ['그리고', '하지만', '그런데']
+    words = text.split()
+    words = [word for word in words if word not in stopwords]
+
+    return words
+```
+
+---
+
+## 🎯 결론
+
+**BM25**는 **키워드 기반 검색의 표준**이며, **Vector Search와 상호 보완적**인 관계입니다.
+
+### 핵심 포인트
+
+1. 🔍 **정확한 키워드 매칭**에 탁월
+2. ⚡ **빠른 검색 속도**
+3. 🧮 **투명한 점수 계산**
+4. 🤝 **Vector Search와 조합 시 최고 성능**
+
+**추천**: 실제 서비스에서는 **하이브리드 검색**을 사용하여 BM25의 정확성과 Vector Search의 의미 이해를 모두 활용하세요! 🚀

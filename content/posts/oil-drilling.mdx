@@ -1,0 +1,160 @@
+---
+title: "석유 시추"
+date: 2024-11-07
+island: library
+room: algo
+tags: []
+---
+## [석유 시추 문제 L2](https://school.programmers.co.kr/learn/courses/30/lessons/250136)
+
+## 문제 설명
+
+세로길이 `n`, 가로길이 `m`인 격자 모양의 땅에서 석유를 시추하는 문제입니다. 시추관은 수직으로 단 하나만 설치할 수 있으며, 가장 많은 석유를 뽑을 수 있는 위치를 찾아야 합니다.
+
+### 문제 조건
+
+- 시추관은 열 하나를 관통하는 형태
+- 열과 열 사이에는 시추관을 설치할 수 없음
+- 시추관이 석유 덩어리의 일부를 지나면 해당 덩어리의 모든 석유를 획득
+- 석유 덩어리는 상, 하, 좌, 우로 연결된 형태
+
+### 예시 그림
+
+![석유시추-1](https://grepp-programmers.s3.ap-northeast-2.amazonaws.com/files/production/beb862a9-5382-4f61-adae-bd6e9503c014/%E1%84%89%E1%85%A5%E1%86%A8%E1%84%8B%E1%85%B2%E1%84%89%E1%85%B5%E1%84%8E%E1%85%AE-1.drawio.png)
+
+위 그림에서 석유 덩어리의 크기는 왼쪽부터 8, 7, 2입니다.
+
+![석유시추-2](https://grepp-programmers.s3.ap-northeast-2.amazonaws.com/files/production/0b10a9f6-6d98-44d6-a342-f984ea47315c/%E1%84%89%E1%85%A5%E1%86%A8%E1%84%8B%E1%85%B2%E1%84%89%E1%85%B5%E1%84%8E%E1%85%AE-2.drawio.png)
+
+### 시추관 위치별 획득 가능한 석유량
+
+| 시추관의 위치 | 획득한 덩어리 | 총 석유량 |
+| ------------- | ------------- | --------- |
+| 1             | [8]           | 8         |
+| 2             | [8]           | 8         |
+| 3             | [8]           | 8         |
+| 4             | [7]           | 7         |
+| 5             | [7]           | 7         |
+| 6             | [7]           | 7         |
+| 7             | [7, 2]        | 9         |
+| 8             | [2]           | 2         |
+
+## 제한 조건
+
+1. 땅의 크기
+
+   - 세로길이(n): 1 ≤ n ≤ 500
+   - 가로길이(m): 1 ≤ m ≤ 500
+
+2. land 배열 정보
+   - land[i][j]는 i+1행 j+1열 땅의 정보
+   - 0: 빈 땅
+   - 1: 석유가 있는 땅
+
+## 해결 코드
+
+```javascript
+function solution(land) {
+  let max = 0;
+  const n = land.length;
+  const m = land[0].length;
+  let oil_index = 1;
+
+  const visited = new Array(n).fill().map((_) => new Array(m).fill(0));
+  const oilMap = new Map();
+
+  const dx = [-1, 0, 1, 0];
+  const dy = [0, 1, 0, -1];
+
+  function bfs(init_x, init_y) {
+    let oil = 0;
+    const queue = [{ x: init_x, y: init_y }];
+
+    visited[init_x][init_y] = oil_index;
+
+    while (queue.length) {
+      const coord = queue.shift();
+      let x = coord.x;
+      let y = coord.y;
+
+      if (land[x][y] === 1) {
+        oil++;
+      }
+
+      for (let i = 0; i < 4; i++) {
+        let nx = x + dx[i];
+        let ny = y + dy[i];
+
+        if (nx < 0 || nx >= n || ny < 0 || ny >= m || visited[nx][ny]) continue;
+
+        if (land[nx][ny] === 1) {
+          visited[nx][ny] = oil_index;
+          queue.push({ x: nx, y: ny });
+        }
+      }
+    }
+
+    oilMap[oil_index++] = oil;
+    return oil;
+  }
+
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < m; j++) {
+      if (visited[i][j] === 0 && land[i][j] > 0) bfs(i, j);
+    }
+  }
+
+  for (let i = 0; i < m; i++) {
+    let sum = 0;
+    const set = new Set();
+    for (let j = 0; j < n; j++) {
+      if (visited[j][i] !== 0) set.add(visited[j][i]);
+    }
+    set.forEach((item) => {
+      sum += oilMap[item];
+    });
+
+    max = sum > max ? sum : max;
+  }
+  return max;
+}
+```
+
+## 주요 알고리즘 설명
+
+1. BFS를 사용한 석유 덩어리 탐색
+
+   - 각 석유 덩어리에 고유 번호 부여
+   - visited 배열에 덩어리 번호 저장
+   - oilMap에 덩어리 번호와 크기 매핑
+
+2. 최대 석유량 계산
+   - 각 열별로 Set을 사용해 중복 덩어리 제거
+   - 해당 열에서 접근 가능한 모든 덩어리의 크기 합산
+   - 최대값 갱신
+
+## 핵심 문법 요소
+
+1. 2차원 배열 초기화
+
+```javascript
+const visited = new Array(n).fill().map((_) => new Array(m).fill(0));
+```
+
+2. BFS를 위한 Queue 구현
+
+```javascript
+const queue = [{ x: init_x, y: init_y }];
+```
+
+3. Set을 활용한 중복 제거
+
+```javascript
+const set = new Set();
+```
+
+4. 조건부 최대값 갱신
+
+```javascript
+max = sum > max ? sum : max;
+```

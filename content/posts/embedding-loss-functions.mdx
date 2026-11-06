@@ -1,0 +1,68 @@
+---
+title: "임베딩 파인튜닝 Loss 정리: Triplet · MNRL · Contrastive"
+date: 2026-01-08
+island: library
+room: ai
+tags: ["Embedding", "Fine-tuning", "Loss"]
+---
+## **TripletLoss**
+
+"이 질문(anchor)에는 이 문서(positive)가 맞고, 이 문서(negative)는 틀려"라고 **직접 알려주는** 방식입니다.
+
+```
+학습 데이터:
+- anchor: "연차 신청 방법"
+- positive: "휴가 신청서 작성 절차"  ← 이게 정답
+- negative: "퇴직금 계산법"          ← 이건 오답
+```
+
+모델은 anchor와 positive는 가깝게, anchor와 negative는 멀게 학습합니다.
+
+**Hard Negative가 필요한 이유**: "퇴직금 계산법"처럼 완전히 다른 문서는 구분하기 쉽습니다. "휴가 일수 계산법"처럼 **헷갈리는 문서**를 negative로 줘야 모델이 더 정교해집니다. 이걸 찾는 게 번거롭습니다.
+
+---
+
+## **MultipleNegativesRankingLoss**
+
+Negative를 직접 안 만들어도 됩니다. **배치 안의 다른 positive들이 자동으로 negative가 됩니다.**
+
+```
+배치에 4개 샘플이 있다면:
+- ("연차 신청 방법", "휴가 신청서 작성 절차")
+- ("급여 명세서 확인", "급여 조회 방법 안내")
+- ("출장비 정산", "출장 경비 처리 절차")
+- ("재택근무 신청", "재택근무 신청서 작성")
+
+"연차 신청 방법" 입장에서:
+- positive: "휴가 신청서 작성 절차"
+- negative: 나머지 3개 문서 (자동 생성)
+```
+
+**큰 배치가 필요한 이유**: 배치가 작으면 negative 수가 적어서 학습 효과가 떨어집니다. 보통 배치 크기 64~256을 권장합니다.
+
+---
+
+## **ContrastiveLoss**
+
+두 문서가 **얼마나 유사한지 점수(0~1)로** 알려주는 방식입니다.
+
+```
+학습 데이터:
+- ("연차 신청 방법", "휴가 신청서 작성 절차", 1.0)  ← 유사함
+- ("연차 신청 방법", "퇴직금 계산법", 0.0)          ← 유사하지 않음
+- ("연차 신청 방법", "휴가 일수 계산", 0.7)         ← 어느 정도 유사
+```
+
+**많은 데이터가 필요한 이유**: 모든 쌍에 대해 유사도 점수를 사람이 매겨야 합니다. Triplet이나 MNR보다 라벨링 작업량이 많습니다.
+
+---
+
+## **정리**
+
+|Loss|핵심|데이터 준비 난이도|
+|---|---|---|
+|TripletLoss|정답/오답을 직접 지정|중간 (Hard Negative 찾기)|
+|MultipleNegativesRankingLoss|오답은 배치에서 자동 생성|쉬움 (정답 쌍만 준비)|
+|ContrastiveLoss|유사도 점수를 직접 지정|어려움 (모든 쌍에 점수)|
+
+**실무 권장**: 데이터가 적으면 **MultipleNegativesRankingLoss**로 시작하고, 성능이 부족하면 Hard Negative를 추가해서 **TripletLoss**로 전환합니다.

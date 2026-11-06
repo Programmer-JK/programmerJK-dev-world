@@ -1,0 +1,481 @@
+---
+title: "RAG 평가 기준 가이드"
+date: 2026-01-08
+island: library
+room: ai
+tags: ["RAG", "Eval", "Gold Set"]
+---
+_(Human-labeled Gold Set 기반)_
+
+---
+
+## 1. 평가의 기본 원칙
+
+### 1.1 사람 판단 기반 Gold Set
+
+모든 Retrieval / Re-ranking 성능 평가는 **사람이 판단하여 작성한 정답 데이터(Gold Set)** 를 기준으로 수행한다.
+
+**정답의 정의**
+
+- 단순 키워드 일치가 아님
+- 질문에 **답변 생성에 실제로 기여하는 문서**
+- 법적·업무적으로 **근거로 사용 가능한 문서**
+
+> 💡 **핵심 원칙**  
+> 모델의 역할은 "정답을 판단"하는 것이 아니라 **사람 판단을 얼마나 잘 재현하는지**를 보여주는 것이다.
+
+---
+
+## 2. Gold Set 구축
+
+### 2.1 관련성 등급 기준
+
+|등급|명칭|정의|예시|
+|:-:|---|---|---|
+|**3**|필수|답변 생성에 반드시 필요한 핵심 근거|직접적인 규정 조항|
+|**2**|유용|답변 보완에 기여하는 정보|관련 참고 정보|
+|**1**|관련|주제는 맞으나 답변에 직접 불필요|배경 설명|
+|**0**|무관|질문과 관련 없음|다른 주제|
+
+**등급 판정 예시**
+
+```
+질문: "연차 휴가 신청 방법이 어떻게 되나요?"
+
+등급 3: "HR 시스템 [휴가신청] 메뉴에서 최소 3일 전 신청, 승인권자는 직속 상사"
+        → 절차, 기한, 승인자 모두 포함
+
+등급 2: "연차 휴가는 1년 근속 시 15일 부여"
+        → 유용하나 신청 '방법'은 아님
+
+등급 1: "당사는 다양한 휴가 제도를 운영"
+        → 관련 주제이나 구체적 정보 없음
+
+등급 0: "출장비 정산은 경비 시스템에서 진행"
+        → 완전히 다른 주제
+```
+
+---
+
+### 2.2 구축 프로세스
+
+```
+Step 1: 쿼리 수집
+  • 실제 사용자 질문 로그에서 대표 쿼리 선정
+  • 도메인별 분포 및 난이도 고려
+
+Step 2: 후보 문서 추출 (자동)
+  • BM25 Top-50 + Embedding Top-50 Union
+  • 사람 검토 범위 축소 목적
+
+Step 3: 사람 라벨링
+  • 도메인 전문가 2인 이상 독립 평가
+  • 0-3 등급 부여 + 판단 근거 기록
+
+Step 4: 품질 검증
+  • Inter-Annotator Agreement (Cohen's Kappa ≥ 0.6 목표)
+  • 불일치 케이스 재검토
+```
+
+---
+
+### 2.3 권장 샘플 수
+
+|구분|쿼리 수|총 판정 수|용도|
+|---|:-:|:-:|---|
+|최소|100개|~500개|PoC, 초기 검증|
+|권장|300개|~2,000개|운영 평가 기준|
+|고품질|500개+|~5,000개+|Fine-tuning, 벤치마크|
+
+---
+
+## 3. 핵심 평가 지표
+
+### 3.1 지표 요약
+
+| 지표              | 수식                        | 목적      | 주요 대상            |
+| --------------- | ------------------------- | ------- | ---------------- |
+| **Recall@K**    | (K개 중 관련 문서) / (전체 관련 문서) | 누락 방지   | Retriever        |
+| **Precision@K** | (K개 중 관련 문서) / K          | 노이즈 최소화 | Context Selector |
+| **MRR**         | 1 / (첫 정답 순위) 의 평균        | 첫 정답 위치 | Re-ranker        |
+| **NDCG@K**      | DCG / IDCG (순위 가중)        | 순위 품질   | Re-ranker        |
+
+---
+
+### 3.2 지표별 상세
+
+#### Recall@K
+
+- **목적**: 관련 문서 누락 방지
+- **특징**: 순위 무관, K 안에 포함 여부만 판단
+- **사용**: Retriever 단계 평가
+
+```
+예시: 전체 관련 문서 4개, 상위 10개 중 3개 포함
+Recall@10 = 3/4 = 0.75
+```
+
+#### Precision@K
+
+- **목적**: LLM 컨텍스트 노이즈 측정
+- **의미**: 낮으면 Hallucination 위험 증가
+- **Trade-off**: Recall과 상충 → Re-ranker로 해결
+
+```
+예시: 상위 5개 중 관련 문서 2개
+Precision@5 = 2/5 = 0.4
+```
+
+#### MRR (Mean Reciprocal Rank)
+
+- **목적**: 첫 번째 정답이 얼마나 위에 오는지
+- **한계**: 첫 정답만 고려, 다문서 RAG에서는 보조 지표
+
+```
+예시: 3개 쿼리에서 첫 정답 순위가 1위, 3위, 2위
+MRR = (1/1 + 1/3 + 1/2) / 3 = 0.61
+```
+
+#### NDCG@K
+
+- **목적**: 중요한 문서를 더 위에 배치했는지
+- **특징**: Graded Relevance(0-3) 사용, 상위 순위에 가중치
+- **사용**: Re-ranker 평가의 핵심 지표
+
+```
+수식: NDCG = DCG / IDCG
+DCG = Σ (관련성 점수 / log2(순위+1))
+IDCG = 이상적 순서일 때의 DCG
+```
+
+---
+
+### 3.3 RAG 파이프라인별 권장 지표
+
+|단계|모델|핵심 지표|목적|
+|:-:|---|---|---|
+|1|Embedding Retriever|**Recall@10, @20**|문서 누락 방지|
+|2|Re-ranker|**NDCG@5, MRR**|정렬 품질|
+|3|Context Selector|**Precision@K**|노이즈 감소|
+|4|LLM Answer|**Human Eval**|최종 품질|
+
+---
+
+### 3.4 실무 기준값
+
+| 지표          |  최소  |  목표  | 위험 수준  |
+| ----------- | :--: | :--: | :----: |
+| Recall@20   | 0.85 | 0.95 | < 0.80 |
+| NDCG@5      | 0.70 | 0.85 | < 0.60 |
+| MRR         | 0.60 | 0.75 | < 0.50 |
+| Precision@5 | 0.60 | 0.80 | < 0.50 |
+
+---
+
+## 4. PoC 가이드
+
+### 4.1 PoC vs 운영 비교
+
+| 항목            | PoC                        | 운영           |
+| ------------- | -------------------------- | ------------ |
+| Gold Set 쿼리 수 | **30~50개**                 | 300개+        |
+| 라벨러           | **1인**                     | 2인 이상        |
+| 등급 체계         | **Binary (관련/무관)** 가능      | Graded (0-3) |
+| 평가 지표         | **Recall@10, Precision@5** | 4개 전부        |
+| 목적            | 기본 동작 검증                   | 정밀 성능 측정     |
+
+---
+
+### 4.2 PoC용 간소화 Gold Set
+
+```json
+{
+  "q001": {
+    "query": "연차 휴가 신청 방법",
+    "relevances": {"chunk_045": 1, "chunk_102": 1}
+  },
+  "q002": {
+    "query": "육아휴직 급여",
+    "relevances": {"chunk_078": 1}
+  }
+}
+```
+
+> Binary(0/1)로도 Recall, Precision, MRR 측정 가능  
+> (NDCG만 Graded일 때 의미 있음)
+
+---
+
+### 4.3 PoC 통과 기준
+
+| 지표          | PoC 통과 | 비고  |
+| ----------- | :----: | --- |
+| Recall@10   | ≥ 0.70 | 필수  |
+| Precision@5 | ≥ 0.50 | 권장  |
+
+```
+PoC 목표:
+"이 Retriever/Re-ranker 조합이 우리 도메인에서 기본적으로 동작하는가?"
+
+→ 통과 시: 운영 전환, Gold Set 확장
+→ 실패 시: 모델 교체 또는 데이터 점검
+```
+
+---
+
+## 부록 A: 측정 코드 예시
+
+### 평가 모듈 구조
+
+#### 1. 기본 구조
+
+```
+evaluation/
+├── __init__.py
+├── metrics.py          # 지표 계산 함수들
+├── evaluator.py        # 통합 평가 클래스
+├── gold_set_loader.py  # Gold Set 로드
+└── report.py           # 결과 출력/저장
+```
+
+#### 2. 핵심 코드
+
+**metrics.py** - 개별 지표 계산
+
+```python
+import numpy as np
+from typing import List, Dict, Set
+
+def recall_at_k(retrieved: List[str], relevant: Set[str], k: int) -> float:
+    """
+    상위 K개 중 관련 chunk 비율 (전체 관련 chunk 대비)
+    """
+    if not relevant:
+        return 0.0
+    
+    retrieved_at_k = set(retrieved[:k])
+    hits = len(retrieved_at_k & relevant)
+    return hits / len(relevant)
+
+
+def precision_at_k(retrieved: List[str], relevant: Set[str], k: int) -> float:
+    """
+    상위 K개 중 관련 chunk 비율 (K 대비)
+    """
+    retrieved_at_k = set(retrieved[:k])
+    hits = len(retrieved_at_k & relevant)
+    return hits / k
+
+
+def mrr(retrieved: List[str], relevant: Set[str]) -> float:
+    """
+    첫 번째 관련 chunk의 순위 역수
+    """
+    for rank, chunk_id in enumerate(retrieved, 1):
+        if chunk_id in relevant:
+            return 1.0 / rank
+    return 0.0
+
+
+def ndcg_at_k(retrieved: List[str], relevances: Dict[str, int], k: int) -> float:
+    """
+    순위 가중 관련성 점수 (Graded Relevance 사용)
+    
+    Args:
+        retrieved: 검색 결과 chunk_id 리스트 (순위순)
+        relevances: {chunk_id: 관련성 점수(0-3)} 딕셔너리
+        k: 상위 K개
+    """
+    # 실제 DCG
+    dcg = 0.0
+    for i, chunk_id in enumerate(retrieved[:k]):
+        rel = relevances.get(chunk_id, 0)
+        dcg += rel / np.log2(i + 2)  # i+2 because log2(1) = 0
+    
+    # 이상적 DCG (관련성 높은 순 정렬)
+    ideal_rels = sorted(relevances.values(), reverse=True)[:k]
+    idcg = sum(rel / np.log2(i + 2) for i, rel in enumerate(ideal_rels))
+    
+    return dcg / idcg if idcg > 0 else 0.0
+```
+
+**evaluator.py** - 통합 평가 클래스
+
+```python
+from typing import Dict, List, Any
+from .metrics import recall_at_k, precision_at_k, mrr, ndcg_at_k
+
+class RetrievalEvaluator:
+    def __init__(self, gold_set: Dict[str, Dict]):
+        """
+        Args:
+            gold_set: {
+                "query_id": {
+                    "query": "질문 텍스트",
+                    "relevances": {"chunk_id": score, ...}  # 0-3 점수
+                }
+            }
+        """
+        self.gold_set = gold_set
+    
+    def evaluate_single(
+        self, 
+        query_id: str, 
+        retrieved: List[str],
+        k_values: List[int] = [5, 10, 20]
+    ) -> Dict[str, float]:
+        """단일 쿼리 평가"""
+        
+        gold = self.gold_set[query_id]
+        relevances = gold["relevances"]
+        relevant = set(relevances.keys())  # 관련 chunk ID 집합
+        
+        results = {}
+        
+        # Recall@K, Precision@K, NDCG@K
+        for k in k_values:
+            results[f"recall@{k}"] = recall_at_k(retrieved, relevant, k)
+            results[f"precision@{k}"] = precision_at_k(retrieved, relevant, k)
+            results[f"ndcg@{k}"] = ndcg_at_k(retrieved, relevances, k)
+        
+        # MRR (K 무관)
+        results["mrr"] = mrr(retrieved, relevant)
+        
+        return results
+    
+    def evaluate_all(
+        self,
+        all_results: Dict[str, List[str]],
+        k_values: List[int] = [5, 10, 20]
+    ) -> Dict[str, float]:
+        """
+        전체 쿼리 평가 및 평균
+        
+        Args:
+            all_results: {"query_id": [retrieved_chunk_ids], ...}
+        """
+        all_metrics = []
+        
+        for query_id, retrieved in all_results.items():
+            if query_id in self.gold_set:
+                metrics = self.evaluate_single(query_id, retrieved, k_values)
+                all_metrics.append(metrics)
+        
+        # 평균 계산
+        if not all_metrics:
+            return {}
+        
+        avg_results = {}
+        for key in all_metrics[0].keys():
+            avg_results[key] = sum(m[key] for m in all_metrics) / len(all_metrics)
+        
+        return avg_results
+```
+
+#### 3. 사용 예시
+
+```python
+from evaluation import RetrievalEvaluator
+
+# 1. Gold Set 준비
+gold_set = {
+    "q001": {
+        "query": "연차 휴가 신청 방법",
+        "relevances": {"chunk_A": 3, "chunk_B": 2, "chunk_C": 1}
+    },
+    "q002": {
+        "query": "육아휴직 급여",
+        "relevances": {"chunk_X": 3, "chunk_Y": 2}
+    }
+}
+
+# 2. 평가기 초기화
+evaluator = RetrievalEvaluator(gold_set)
+
+# 3. 검색 결과 (실제로는 RAG 시스템에서 받아옴)
+search_results = {
+    "q001": ["chunk_A", "chunk_Z", "chunk_B", "chunk_W", "chunk_C"],
+    "q002": ["chunk_Y", "chunk_X", "chunk_Z", "chunk_W"]
+}
+
+# 4. 평가 실행
+metrics = evaluator.evaluate_all(search_results, k_values=[3, 5])
+
+# 5. 결과 확인
+for name, value in metrics.items():
+    print(f"{name}: {value:.4f}")
+```
+
+**출력 예시**
+
+```
+recall@3: 0.6000
+recall@5: 0.8000
+precision@3: 0.5000
+precision@5: 0.4000
+ndcg@3: 0.7654
+ndcg@5: 0.8123
+mrr: 0.7500
+```
+
+#### 4. 실제 파이프라인 연동
+
+```python
+# RAG 서비스에서 평가 모듈 호출
+class RAGService:
+    def __init__(self, retriever, reranker, evaluator=None):
+        self.retriever = retriever
+        self.reranker = reranker
+        self.evaluator = evaluator  # 평가 모듈 (선택)
+    
+    def search(self, query: str, query_id: str = None) -> List[str]:
+        # 1. 검색
+        results = self.retriever.search(query, top_k=50)
+        
+        # 2. 리랭킹
+        reranked = self.reranker.rerank(query, results, top_k=10)
+        
+        # 3. 평가 (query_id 있을 때만)
+        if self.evaluator and query_id:
+            metrics = self.evaluator.evaluate_single(query_id, reranked)
+            self._log_metrics(query_id, metrics)
+        
+        return reranked
+```
+
+---
+
+## 부록 B: Gold Set 템플릿
+
+### B.1 JSON 형식 (운영용 - Graded)
+
+- `relevances`: chunk_id와 관련성 점수 (3=필수, 2=유용, 1=관련)
+
+```json
+{
+  "q001": {
+    "query": "연차 휴가 신청 방법이 어떻게 되나요?",
+    "relevances": {
+      "chunk_045": 3,
+      "chunk_102": 2,
+      "chunk_203": 1
+    }
+  }
+}
+```
+
+### B.2 JSON 형식 (PoC용 - Binary)
+
+- `relevances`: chunk_id와 관련 여부 (1=관련, 0=무관)
+
+```json
+{
+  "q001": {
+    "query": "연차 휴가 신청 방법이 어떻게 되나요?",
+    "relevances": {
+      "chunk_045": 1,
+      "chunk_102": 1
+    }
+  }
+}
+```

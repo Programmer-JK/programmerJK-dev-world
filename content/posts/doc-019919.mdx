@@ -1,0 +1,95 @@
+---
+title: "package.json vs package-lock.json"
+summary: "Node.js 프로젝트의 package.json과 package-lock.json 파일의 차이점과 역할 설명"
+date: 2025-01-06
+island: library
+room: frontend
+tags: ["nodejs", "npm", "package-management", "dependency-management", "version-control", "project-setup", "build-automation"]
+---
+## package.json
+- 프로젝트의 메타데이터를 담고 있는 설정 파일
+- npm init 명령어로 생성
+- 주요 역할:
+  - 프로젝트 기본 정보 관리 (이름, 버전, 설명 등)
+  - 의존성 패키지 관리
+  - 프로젝트 스크립트 정의
+- 의존성 버전 관리 특징:
+  - 유연한 버전 표기법 사용 (^, ~, >, < 등)
+  - ^1.2.3: 1.x.x 중 최신 버전
+  - ~1.2.3: 1.2.x 중 최신 버전
+  - 1.2.3: 정확히 해당 버전만 사용
+
+## package-lock.json
+- npm 5.0 이상에서 자동 생성되는 파일
+- 의존성 트리의 정확한 버전을 저장
+- 주요 역할:
+  - 팀원 간 동일한 의존성 보장
+  - 패키지 설치 시 일관성 유지
+  - 빌드 재현성 확보
+- 포함하는 정보:
+  - 정확한 버전 정보
+  - 패키지의 무결성을 검증하는 해시값
+  - 의존성 트리 구조
+
+## 두 파일의 차이점
+
+### 1. 버전 관리 방식
+- package.json:
+  ```json
+  {
+    "dependencies": {
+      "lodash": "^4.17.21"  // 4.17.21 이상, 5.0.0 미만
+    }
+  }
+  ```
+- package-lock.json:
+  ```json
+  {
+    "dependencies": {
+      "lodash": {
+        "version": "4.17.21",  // 정확한 버전
+        "resolved": "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz",
+        "integrity": "sha512-..." // 해시값
+      }
+    }
+  }
+  ```
+
+### 2. 사용 목적
+- package.json: 
+  - 프로젝트 설정 관리
+  - 필요한 의존성 선언
+  - 스크립트 및 설정 정의
+- package-lock.json:
+  - 의존성의 정확한 버전 고정
+  - 패키지 설치의 일관성 보장
+  - 빌드 환경의 재현성 확보
+
+### 3. 버전 관리(Git) 관점
+- package.json:
+  - 반드시 버전 관리에 포함
+  - 프로젝트의 필수 설정 파일
+- package-lock.json:
+  - 버전 관리에 포함 권장
+  - 팀 프로젝트에서 동일한 의존성 보장
+  - CI/CD 파이프라인의 안정성 확보
+
+## 실제 사용 시나리오
+
+### 1. 새 프로젝트 시작
+```bash
+npm init              # package.json 생성
+npm install lodash    # 의존성 설치, package-lock.json 자동 생성
+```
+
+### 2. 기존 프로젝트 클론
+```bash
+git clone <repository>
+npm install           # package-lock.json 기반으로 정확한 버전 설치
+```
+
+### 3. 의존성 업데이트
+```bash
+npm update            # package.json의 버전 범위 내에서 업데이트
+npm install lodash@latest  # 최신 버전으로 강제 업데이트
+```

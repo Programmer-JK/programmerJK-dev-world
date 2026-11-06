@@ -1,0 +1,353 @@
+---
+title: "JavaScript FormData 객체를 중첩 객체로 변환하기 - 심화"
+date: 2025-03-12
+island: library
+room: frontend
+tags: []
+---
+웹 애플리케이션에서 폼 데이터를 처리할 때는 단순히 값을 추출하는 것보다 더 복잡한 작업이 필요한 경우가 많습니다. 특히 대시보드, 차트 라이브러리, 설정 패널 등을 다룰 때는 HTML 폼의 평면적인 이름-값 쌍을 중첩된 구조의 설정 객체로 변환해야 하는 경우가 많습니다. 이 글에서는 `FormData` 객체를 복잡한 중첩 구조를 가진 JavaScript 객체로 변환하는 효과적인 방법을 알아보겠습니다.
+
+## 기본 개념: FormData와 중첩 객체
+
+HTML 폼에서 제출된 데이터는 `FormData` 객체로 쉽게 수집할 수 있습니다. 하지만 `FormData`는 기본적으로 평면적인 키-값 쌍의 집합입니다. 예를 들어:
+
+```html
+<form id="chartForm">
+  <input name="title.text" value="차트 제목">
+  <input name="xAxis.title.text" value="X축 제목">
+  <input name="yAxis.title.text" value="Y축 제목">
+</form>
+```
+
+위 폼에서 수집한 `FormData`는 다음과 같은 평면적인 구조를 갖습니다:
+
+```
+"title.text" => "차트 제목"
+"xAxis.title.text" => "X축 제목"
+"yAxis.title.text" => "Y축 제목"
+```
+
+그러나 많은 JavaScript 라이브러리(특히 차트 라이브러리)는 다음과 같은 중첩된 구조의 설정 객체를 기대합니다:
+
+```javascript
+{
+  title: {
+    text: "차트 제목"
+  },
+  xAxis: {
+    title: {
+      text: "X축 제목"
+    }
+  },
+  yAxis: {
+    title: {
+      text: "Y축 제목"
+    }
+  }
+}
+```
+
+이러한 변환을 효율적으로 처리하는 방법을 살펴보겠습니다.
+
+## FormData를 중첩 객체로 변환하는 방법
+
+### 1. 중첩 속성 처리하기
+
+점 표기법(dot notation)을 해석하여 중첩 객체를 생성하는 핵심 함수입니다:
+
+```javascript
+function setNestedValue(obj, path, value) {
+  const parts = path.split(".");
+  let current = obj;
+  
+  // 마지막 부분을 제외한 모든 부분에 대해 객체 구조 생성
+  for (let i = 0; i < parts.length - 1; i++) {
+    const part = parts[i];
+    if (!current[part]) current[part] = {};
+    current = current[part];
+  }
+  
+  // 마지막 부분에 실제 값 할당
+  current[parts[parts.length - 1]] = value;
+}
+```
+
+이 함수는 `"xAxis.title.text"`와 같은 경로를 받아 적절한 중첩 구조를 생성하고 최종 값을 설정합니다.
+
+### 2. FormData 순회 및 변환
+
+`FormData`의 모든 항목을 순회하면서 중첩 객체로 변환합니다:
+
+```javascript
+function formDataToObject(formData) {
+  const result = {};
+  
+  for (const [key, value] of formData.entries()) {
+    if (key.includes(".")) {
+      // 점이 있는 키는 중첩 속성으로 처리
+      setNestedValue(result, key, value);
+    } else {
+      // 단순 키는 직접 할당
+      result[key] = value;
+    }
+  }
+  
+  return result;
+}
+```
+
+## 특수 경우 처리하기
+
+실제 애플리케이션에서는 단순히 점 표기법을 객체로 변환하는 것보다 더 복잡한 요구사항이 있을 수 있습니다.
+
+### 1. 체크박스 값 처리
+
+체크박스의 경우 `FormData`에서는 보통 "on" 값으로 전달되지만, 실제로는 `true`/`false` 값이 필요합니다:
+
+```javascript
+if (value === "on") {
+  const checkbox = document.querySelector(`[name="${key}"]`);
+  if (checkbox && checkbox.type === "checkbox") {
+    value = checkbox.checked ? "true" : "false";
+  }
+}
+```
+
+### 2. 관련 필드 결합하기
+
+때로는 여러 입력 필드의 값을 결합하여 하나의 설정 값으로 만들어야 할 수 있습니다. 예를 들어, 중심점의 X좌표와 Y좌표를 하나의 배열로 결합하거나, 접두사와 접미사를 결합하여 형식 문자열을 만드는 경우입니다:
+
+```javascript
+// 관련 필드를 식별하고 추적하기 위한 맵 생성
+const combineKeys = new Map();
+
+// 특수 패턴을 가진 키 식별
+if (key.endsWith(".centerX") || key.endsWith(".centerY") || 
+    key.endsWith(".prefix") || key.endsWith(".suffix")) {
+  
+  const baseKey = key.substring(0, key.lastIndexOf("."));
+  const keyType = key.endsWith(".centerX") || key.endsWith(".centerY") ? "center" : "format";
+  const subKey = key.split(".").pop();
+  
+  if (!combineKeys.has(baseKey)) {
+    combineKeys.set(baseKey, {type: keyType, values: {}});
+  }
+  
+  combineKeys.get(baseKey).values[subKey] = value;
+  continue; // 이 필드는 일단 건너뜀
+}
+```
+
+### 3. 결합된 값 처리하기
+
+관련 필드를 모두 수집한 후, 이를 적절한 형식으로 결합하여 설정 객체에 추가합니다:
+
+```javascript
+// 수집된 관련 필드 처리
+for (const [baseKey, data] of combineKeys.entries()) {
+  if (data.type === "center" && data.values.centerX !== "" && data.values.centerY !== "") {
+    // 중심점 좌표 배열로 설정
+    setNestedValue(result, baseKey, [`${data.values.centerX}%`, `${data.values.centerY}%`]);
+  } 
+  else if (data.type === "format") {
+    // 형식 문자열 생성
+    const prefix = data.values.prefix || "";
+    const suffix = data.values.suffix || "";
+    
+    // 컨텍스트에 따라 다른 형식 패턴 적용
+    switch (baseKey) {
+      case "legend.labelFormat":
+        setNestedValue(result, baseKey, `${prefix}{name}${suffix}`);
+        break;
+      case "tooltip.headerFormat":
+      case "plotOptions.series.dataLabels.format":
+        setNestedValue(result, baseKey, `${prefix}{y}${suffix}`);
+        break;
+      case "xAxis.labels.format":
+      case "yAxis.labels.format":
+        setNestedValue(result, baseKey, `${prefix}{value}${suffix}`);
+        break;
+    }
+  }
+}
+```
+
+## 실전 활용 예시
+
+이러한 기능을 가진 변환기는 다양한 시나리오에서 유용하게 활용될 수 있습니다:
+
+### 차트 설정 패널
+
+사용자가 UI를 통해 차트의 다양한 속성을 조정하고 실시간으로 미리보기를 생성하는 경우:
+
+```javascript
+document.getElementById('chartForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  
+  const formData = new FormData(this);
+  const chartOptions = formDataToOption(formData);
+  
+  // 차트 라이브러리로 옵션 전달
+  renderChart(chartOptions);
+});
+```
+
+### 설정 저장 및 불러오기
+
+사용자 설정을 저장하고 나중에 불러오는 기능:
+
+```javascript
+// 설정 저장
+function saveSettings() {
+  const formData = new FormData(document.getElementById('settingsForm'));
+  const settings = formDataToOption(formData);
+  localStorage.setItem('userSettings', JSON.stringify(settings));
+}
+
+// 설정 불러오기
+function loadSettings() {
+  const settings = JSON.parse(localStorage.getItem('userSettings'));
+  if (settings) {
+    applySettingsToForm(settings);
+  }
+}
+```
+
+## 전체 코드 분석
+
+이제 전체 코드를 살펴보고 주요 부분을 상세히 분석해 보겠습니다:
+
+```javascript
+formDataToOption(formData) {
+  const formObject = {};
+  const combineKeys = new Map();
+  let entries = formData.entries();
+
+  // FormData의 모든 항목 처리
+  for (const pair of entries) {
+    let key = pair[0];
+    let value = pair[1];
+
+    // 체크박스 처리
+    if (value === "on") {
+      const checkbox = this.styler.contentEl.querySelector(`[name="${key}"]`);
+      if (checkbox && checkbox.type === "checkbox") {
+        value = checkbox.checked ? "true" : "false";
+      }
+    }
+
+    // 특수 패턴을 가진 키 식별 및 관련 값 수집
+    if (key.endsWith(".centerX") || key.endsWith(".centerY") || 
+        key.endsWith(".prefix") || key.endsWith(".suffix")) {
+      
+      const baseKey = key.substring(0, key.lastIndexOf("."));
+      const keyType = key.endsWith(".centerX") || key.endsWith(".centerY") ? "center" : "format";
+      const subKey = key.split(".").pop();
+      
+      if (!combineKeys.has(baseKey)) {
+        combineKeys.set(baseKey, {type: keyType, values: {}});
+      }
+      
+      combineKeys.get(baseKey).values[subKey] = value;
+      continue;
+    }
+    
+    // 일반 필드 처리
+    if (key.includes(".")) {
+      this.setNestedValue(formObject, key, value);
+    } else {
+      formObject[key] = value;
+    }
+  }
+
+  // 수집된 관련 필드 처리
+  for (const [baseKey, data] of combineKeys.entries()) {
+    if (data.type === "center" && data.values.centerX !== "" && data.values.centerY !== "") {
+      // 중심점 좌표 배열로 설정
+      this.setNestedValue(formObject, baseKey, [`${data.values.centerX}%`, `${data.values.centerY}%`]);
+    } 
+    else if (data.type === "format") {
+      // 형식 문자열 생성
+      const prefix = data.values.prefix || "";
+      const suffix = data.values.suffix || "";
+      
+      // 컨텍스트에 따라 다른 형식 패턴 적용
+      switch (baseKey) {
+        case "legend.labelFormat":
+          this.setNestedValue(formObject, baseKey, `${prefix}{name}${suffix}`);
+          break;
+        case "tooltip.headerFormat":
+        case "plotOptions.series.dataLabels.format":
+          this.setNestedValue(formObject, baseKey, `${prefix}{y}${suffix}`);
+          break;
+        case "xAxis.labels.format":
+        case "yAxis.labels.format":
+          this.setNestedValue(formObject, baseKey, `${prefix}{value}${suffix}`);
+          break;
+      }
+    }
+  }
+
+  return formObject;
+}
+
+// 중첩 속성 설정 함수
+setNestedValue(obj, path, value) {
+  const parts = path.split(".");
+  let current = obj;
+  
+  for (let i = 0; i < parts.length - 1; i++) {
+    const part = parts[i];
+    if (!current[part]) current[part] = {};
+    current = current[part];
+  }
+  
+  current[parts[parts.length - 1]] = value;
+}
+```
+
+### 주요 컴포넌트 분석:
+
+1. **기본 구조 설정**:
+    
+    - 결과 객체(`formObject`)와 관련 필드 추적을 위한 맵(`combineKeys`)을 초기화합니다.
+2. **체크박스 특수 처리**:
+    
+    - "on" 값을 실제 체크박스 상태에 따라 "true" 또는 "false"로 변환합니다.
+3. **관련 필드 식별 및 그룹화**:
+    
+    - `.centerX`, `.centerY`, `.prefix`, `.suffix`로 끝나는 필드를 식별하고 그룹화합니다.
+    - 이 필드들은 나중에 처리하기 위해 `combineKeys` 맵에 저장됩니다.
+4. **일반 필드 처리**:
+    
+    - 점 표기법을 포함하는 키는 중첩 속성으로 변환합니다.
+    - 단순 키는 직접 결과 객체에 할당합니다.
+5. **관련 필드 처리**:
+    
+    - 중심점 좌표: [x%, y%] 형식의 배열로 변환합니다.
+    - 형식 문자열: 컨텍스트에 따라 적절한 패턴(`{name}`, `{y}`, `{value}`)에 접두사와 접미사를 결합합니다.
+
+## 결론
+
+FormData를 복잡한 중첩 구조의 설정 객체로 변환하는 것은 현대 웹 애플리케이션에서 자주 필요한 작업입니다. 이 글에서 소개한 접근 방식을 통해 다음과 같은 이점을 얻을 수 있습니다:
+
+1. **유연한 폼 설계**: 점 표기법을 사용하여 HTML 폼에서 복잡한 객체 구조를 표현할 수 있습니다.
+2. **관련 필드 그룹화**: 관련된 여러 입력 필드를 하나의 설정 값으로 결합할 수 있습니다.
+3. **특수 케이스 처리**: 체크박스, 좌표, 형식 문자열 등 다양한 특수 케이스를 효과적으로 처리할 수 있습니다.
+
+이러한 기법은 특히 복잡한 설정 인터페이스, 대시보드, 차트 라이브러리 등을 다룰 때 매우 유용합니다. 필요에 따라 이 패턴을 확장하여 더 다양한 특수 케이스를 처리할 수 있습니다.
+
+```javascript
+// 사용 예시
+const form = document.getElementById('configForm');
+form.addEventListener('submit', function(e) {
+  e.preventDefault();
+  const formData = new FormData(this);
+  const config = formDataToOption(formData);
+  console.log('변환된 설정 객체:', config);
+  
+  // 이제 이 설정 객체를 라이브러리에 전달하거나 저장할 수 있습니다
+});
+```
+
+이러한 접근 방식을 통해 사용자 인터페이스와 애플리케이션 로직 간의 복잡한 데이터 변환 문제를 효과적으로 해결할 수 있습니다.

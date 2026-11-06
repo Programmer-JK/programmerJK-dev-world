@@ -1,0 +1,110 @@
+---
+title: "느려진 쿼리와 부풀어 오른 건수 — Oracle 실행계획과 중복 진단"
+summary: "기준일 조건 하나로 30초가 걸린 쿼리, ON 1 = 1로 몇 배가 된 건수. DBMS_XPLAN 읽는 법과 중복을 좁히는 순서."
+date: 2026-10-08
+island: library
+room: backend
+project: finance-orgn
+tags: ["Oracle", "실행계획", "DBMS_XPLAN", "윈도우 함수", "SQL 튜닝"]
+---
+
+조회 SQL을 짜다 보면 "왜 느리지"와 "왜 많지" 두 질문을 계속 만난다. 둘 다 추측보다 확인이 빨랐다.
+
+## 사례 1 — 기준일을 붙이자 30초
+
+**증상**: 기준일 조건을 추가하자 첫 번째 쿼리가 30초 걸렸다.
+
+**원인**: `JOIN PARAM K ON V.BASE_YMD = K.BASE_YMD`처럼 기준일이 **조인 조건**이 되면서
+
+1. 인덱스를 못 쓰고,
+2. 드라이빙 순서가 뒤집히고,
+3. `ROW_NUMBER()`가 풀스캔 결과 전체를 정렬했다.
+
+**해결**: 실행계획으로 `TABLE ACCESS FULL`을 확인하고, 기준일을 스칼라 서브쿼리 `(SELECT BASE_YMD FROM BASE)`로 받아 상수 조건처럼 바꿨다. 기준일 컬럼의 타입 불일치(`VARCHAR2` vs `DATE`)도 점검했다.
+
+> 상수처럼 쓰이던 조건을 조인으로 바꾸면 실행계획이 흔들린다.
+
+## 실행계획 읽기
+
+```sql
+ALTER SESSION SET STATISTICS_LEVEL = ALL;          -- 또는 힌트 하나로 충분
+SELECT /*+ GATHER_PLAN_STATISTICS */ ... ;         -- 문제 쿼리 실행
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY_CURSOR(NULL, NULL, 'ALLSTATS LAST +PREDICATE'));
+```
+
+| 볼 것 | 의미 |
+|---|---|
+| **E-Rows vs A-Rows** | 옵티마이저 예상과 실제 행 수. 크게 다르면 조인 순서·방식을 잘못 골랐을 가능성 |
+| **Starts** | 그 단계가 몇 번 반복됐는지. 중첩 루프 안쪽이 수만 번이면 의심 |
+| **Access vs Filter** | access는 인덱스로 범위를 좁힌 조건, filter는 읽은 뒤 버린 조건. 기대한 조건이 filter에만 있으면 인덱스를 못 탄 것 |
+| **암묵 형변환** | predicate에 `INTERNAL_FUNCTION`, `TO_NUMBER(컬럼)`이 보이면 컬럼 쪽에 변환이 걸려 인덱스를 못 쓴 것 |
+
+- 세션 설정은 이후 모든 쿼리에 부하를 주므로 확인 후 되돌린다.
+- `DISPLAY_CURSOR(NULL, NULL, ...)`는 "이 세션의 직전 SQL"이다. 조회 툴이 사이에 다른 SQL을 실행하면 엉뚱한 계획이 나오므로 SQL_ID를 직접 넣기도 한다.
+
+## 사례 2 — 추가 건수가 몇 배로
+
+**원인**: `JOIN PARAM K ON 1 = 1`. `ON 1 = 1`은 사실상 CROSS JOIN이다. PARAM을 DUAL이 아니라 테이블 기반으로 바꾼 뒤 1행이 아니게 되면서 결과가 통째로 곱해졌다.
+
+**해결**: PARAM은 `DUAL` 기반 1행으로 유지.
+
+## 중복을 좁히는 순서
+
+`DISTINCT`부터 붙이기 전에 왜 중복인지 본다.
+
+```sql
+-- ① 행 수와 키 수
+SELECT COUNT(*) AS TOTAL_ROWS, COUNT(DISTINCT EMP_NO) AS DISTINCT_KEYS
+FROM SRC_EMP WHERE BASE_YMD = :BASE_YMD;
+
+-- ② 비교 값까지 같은지 (VAL_SETS = 1이면 단순 중복)
+SELECT EMP_NO, COUNT(*) AS ROWS_,
+       COUNT(DISTINCT SCORE || '|' || RANK_NO || '|' || HOPE_ORG1) AS VAL_SETS
+FROM SRC_EMP WHERE BASE_YMD = :BASE_YMD
+GROUP BY EMP_NO HAVING COUNT(*) > 1
+ORDER BY VAL_SETS DESC
+FETCH FIRST 20 ROWS ONLY;
+```
+
+- 행 수 > 키 수면 같은 키가 여러 행이다.
+- 값까지 같으면 `DISTINCT`로 정리해도 되지만, 값이 다르면 **어느 행이 맞는지 기준**(최신 등)을 정해야 한다.
+
+## 이력 테이블에서 대표 1행 — ROW_NUMBER
+
+평가자를 일괄 생성하다 대체키 위반이 났다. 조직-파트 이력 테이블에 날짜만 다른 행이 여러 개 있었기 때문이다. `DISTINCT`는 모든 컬럼이 같아야 합쳐지므로 효과가 없었다.
+
+```sql
+SELECT E.EMP_NO, O.ORG_NM, P.PART_NM
+FROM CANDIDATE C
+JOIN EMP E ON E.EMP_ID = C.TARGET_ID
+LEFT JOIN ORG O
+  ON TO_CHAR(O.ORG_ID) = DECRYPT_FN(C.ENC_ORG_ID)   -- 숫자 쪽을 명시 변환
+ AND O.COMPANY_CD = E.COMPANY_CD                    -- 오른쪽 조건은 ON에
+LEFT JOIN (SELECT X.*, ROW_NUMBER() OVER (PARTITION BY X.ORG_ID
+                                          ORDER BY X.STA_YMD DESC) AS RN
+           FROM ORG_PART_HIS X) P
+  ON P.ORG_ID = O.ORG_ID AND P.RN = 1;             -- 이력 중 최신 1행
+```
+
+- **윈도우 함수**는 행을 합치지 않고 각 행 옆에 묶음 안의 계산값을 붙인다. WHERE 이후에 계산되므로 `rn = 1`로 거르려면 한 번 감싸야 한다.
+- **LEFT JOIN 조건 위치**: 오른쪽 테이블 조건을 WHERE에 쓰면 NULL 행이 걸러져 사실상 INNER JOIN이 된다. 오른쪽 조건은 `ON`에 둔다.
+- **암묵 형변환 방향**: `NUMBER = VARCHAR2`를 비교하면 Oracle은 문자 쪽을 숫자로 바꾼다. 암호문처럼 숫자가 아닌 값이 하나라도 있으면 `ORA-01722`. 숫자 쪽을 `TO_CHAR`로 명시 변환하면 안전하다.
+
+## INSERT … SELECT에서 차례로 만난 오류
+
+`ORA-00905`(키워드 누락) → `ORA-00926`(VALUES 누락) → `ORA-01722`(숫자 변환) → `ORA-02291`(부모 키 없음) → `ORA-00001`(유니크 위반). 문법, 형변환, FK, 대표 행 순서로 하나씩 풀렸다.
+
+## 자주 찾아본 짧은 지식
+
+| 상황 | 방법 |
+|---|---|
+| 데이터 없으면 'N' | `NVL(MAX('Y'), 'N')` |
+| Upsert | `MERGE … USING dual`. `ORA-38104`(조인 컬럼 수정), `ORA-30926`(원본 중복) |
+| 앞자리 0 | `TO_CHAR(n, 'FM000000')`, `LPAD` — 코드성 값은 처음부터 `VARCHAR2` |
+| 운영 컬럼 삭제 | `SET UNUSED` 후 `DROP UNUSED COLUMNS` |
+| 시간 포맷 콜론 | 프레임워크가 `'HH24:MI'`를 바인드로 오인 → `ORA-01745` |
+| `ORA-00918` | 같은 컬럼명은 테이블 별칭 필수 |
+
+---
+
+> [인사·조직 시스템 고도화 프로젝트](/posts/orgn-project)에서 실제로 작성·디버깅한 코드를 바탕으로 정리했다. 테이블과 컬럼 이름은 일반화했다.

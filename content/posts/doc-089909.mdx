@@ -1,0 +1,74 @@
+---
+title: "useState vs useReducer vs useMemo"
+date: 2025-01-19
+island: library
+room: frontend
+tags: []
+---
+### useState vs useReducer
+
+**useState**
+- 단순한 상태 관리에 적합
+- 독립적인 상태값들을 다룰 때 사용
+- 상태 업데이트 로직이 간단할 때 좋음
+```javascript
+const [count, setCount] = useState(0);
+// 단순 업데이트
+setCount(count + 1);
+```
+
+**useReducer**
+- 복잡한 상태 로직을 다룰 때 적합
+- 여러 상태값이 서로 연관되어 있을 때 유용
+- 상태 업데이트 패턴이 일관적일 때 좋음
+```javascript
+const [state, dispatch] = useReducer(reducer, { count: 0, error: null });
+// 액션을 통한 업데이트
+dispatch({ type: 'increment', payload: 5 });
+```
+
+### useState/useReducer vs useMemo
+
+**useState/useReducer**
+- 상태를 관리하고 업데이트하는 데 사용
+- 상태가 변경되면 컴포넌트가 리렌더링됨
+- 직접적인 상태 관리 도구
+
+**useMemo**
+- 계산 비용이 큰 값을 최적화하는 데 사용
+- 의존성이 변경될 때만 값을 재계산
+- 성능 최적화 도구
+```javascript
+// 비용이 큰 계산을 메모이제이션
+const expensiveValue = useMemo(() => {
+  return someExpensiveCalculation(count);
+}, [count]);
+```
+
+### 사용 예시:
+
+```javascript
+function ShoppingCart() {
+  // 단순한 상태 - useState
+  const [isOpen, setIsOpen] = useState(false);
+  
+  // 복잡한 상태 로직 - useReducer
+  const [cartState, dispatch] = useReducer(cartReducer, {
+    items: [],
+    total: 0,
+    discount: 0
+  });
+  
+  // 비용이 큰 계산 - useMemo
+  const totalWithTax = useMemo(() => {
+    return calculateTotalWithTax(cartState.total, cartState.discount);
+  }, [cartState.total, cartState.discount]);
+  
+  // ...
+}
+```
+
+### 선택 기준:
+- 단순한 상태 관리 → useState
+- 복잡한 상태 로직이나 연관된 상태들 → useReducer
+- 비용이 큰 계산 결과 재사용 → useMemo

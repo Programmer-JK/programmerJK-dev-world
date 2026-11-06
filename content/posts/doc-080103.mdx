@@ -1,0 +1,362 @@
+---
+title: "모바일 환경에서 드래그앤드롭 구현하기"
+date: 2025-02-07
+island: library
+room: frontend
+tags: []
+---
+## 1. 프로젝트 소개
+
+### 1.1 개발 배경
+
+칸반 보드에서 카드를 드래그하여 다른 상태로 이동시키는 기능이 필요했습니다. PC 환경에서는 HTML5의 기본 드래그앤드롭 API를 사용할 수 있지만, 모바일 환경에서는 터치 이벤트를 직접 구현해야 했습니다.
+
+### 1.2 기술 스택
+
+- React 18
+- TypeScript
+- Tailwind CSS
+
+## 문제 해결 과정
+### 1단계: 요구사항 분석과 초기 문제점 파악
+
+#### 요구사항
+1. 모바일에서 카드를 다른 상태 컬럼으로 드래그
+2. 드래그 중 스크롤 가능
+3. 드롭 위치 시각적 표시
+4. 부드러운 사용자 경험
+
+#### 초기 문제점들
+1. 모바일에서 HTML5 드래그앤드롭 API 미지원
+2. 스크롤 중 위치 계산 복잡
+3. 터치 포인트와 요소 위치 간의 차이
+4. TypeScript 타입 안정성 확보 필요
+
+### 2단계: 기본 드래그 기능 구현 과정
+
+#### 2.1 첫 번째 시도 - 단순 위치 이동
+```typescript
+const handleTouchMove = (e: React.TouchEvent) => {
+  const touch = e.touches[0];
+  // 문제점: 터치한 위치로 카드가 순간이동함
+  element.style.top = `${touch.clientY}px`;
+  element.style.left = `${touch.clientX}px`;
+};
+```
+
+#### 2.2 발견된 문제점
+- 카드가 터치 포인트로 순간이동
+- 부자연스러운 움직임
+- 사용자의 터치 포인트와 카드 위치 불일치
+
+#### 2.3 오프셋 도입
+```typescript
+interface TouchRef {
+  offsetX: number;  // 추가: 터치 포인트와 카드 왼쪽 경계 사이 거리
+  offsetY: number;  // 추가: 터치 포인트와 카드 상단 경계 사이 거리
+}
+
+const handleTouchStart = (e: React.TouchEvent) => {
+  const touch = e.touches[0];
+  const rect = target.getBoundingClientRect();
+  
+  // 오프셋 계산
+  const offsetX = touch.clientX - rect.left;
+  const offsetY = touch.clientY - rect.top;
+  
+  touchRef.current = {
+    ...touchRef.current,
+    offsetX,
+    offsetY
+  };
+};
+```
+
+### 3단계: 클론 생성 및 관리
+
+#### 3.1 첫 시도의 문제점
+- 원본 요소를 직접 이동시키면 레이아웃이 깨짐
+- 다른 요소들이 재배치되는 문제
+
+#### 3.2 클론 방식 도입
+```typescript
+const createClone = (target: HTMLElement, rect: DOMRect) => {
+  const clone = target.cloneNode(true) as HTMLElement;
+  
+  // 스타일 설정
+  Object.assign(clone.style, {
+    position: "fixed",
+    width: `${rect.width}px`,
+    height: `${rect.height}px`,
+    left: `${rect.left}px`,
+    top: `${rect.top}px`,
+    opacity: "0.8",
+    zIndex: "1000",
+    pointerEvents: "none"
+  });
+
+  clone.classList.add("dragging-clone");
+  document.body.appendChild(clone);
+  return clone;
+};
+```
+
+#### 3.3 클론 위치 업데이트 최적화
+```typescript
+const updateClonePosition = (
+  clone: HTMLElement,
+  touch: Touch,
+  offsetX: number,
+  offsetY: number
+) => {
+  const newTop = touch.clientY - offsetY;
+  const newLeft = touch.clientX - offsetX;
+  
+  // 위치 업데이트 최적화
+  requestAnimationFrame(() => {
+    clone.style.top = `${newTop}px`;
+    clone.style.left = `${newLeft}px`;
+  });
+};
+```
+
+### 4단계: 스크롤 처리 구현
+
+#### 4.1 초기 스크롤 문제
+- 긴 리스트에서 드래그 중 스크롤 불가능
+- 화면 경계에서 멈추는 현상
+
+#### 4.2 스크롤 영역 설정
+```typescript
+const EDGE_THRESHOLD = 80;  // 스크롤 시작 영역
+const SCROLL_SPEED = 5;     // 스크롤 속도
+
+const isInScrollArea = (touchY: number, viewportHeight: number) => {
+  return {
+    top: touchY < EDGE_THRESHOLD,
+    bottom: touchY > viewportHeight - EDGE_THRESHOLD
+  };
+};
+```
+
+#### 4.3 자동 스크롤 구현
+```typescript
+const handleScroll = (touchY: number) => {
+  const { top, bottom } = isInScrollArea(touchY, window.innerHeight);
+  
+  // 이전 스크롤 인터벌 정리
+  if (touchRef.current.scrollInterval) {
+    clearInterval(touchRef.current.scrollInterval);
+  }
+
+  if (top) {
+    // 위로 스크롤
+    touchRef.current.scrollInterval = setInterval(() => {
+      if (window.scrollY > 0) {
+        window.scrollBy(0, -SCROLL_SPEED);
+        updateClonePosition(/* ... */);
+      }
+    }, 16);
+  } else if (bottom) {
+    // 아래로 스크롤
+    touchRef.current.scrollInterval = setInterval(() => {
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      if (window.scrollY < maxScroll) {
+        window.scrollBy(0, SCROLL_SPEED);
+        updateClonePosition(/* ... */);
+      }
+    }, 16);
+  }
+};
+```
+
+### 5단계: 드롭 영역 감지 구현
+
+#### 5.1 드롭 영역 설정
+```typescript
+// Column.tsx
+const Column = ({ state, cards }) => {
+  return (
+    <div 
+      className="droppable-list" 
+      data-state={state}  // 컬럼의 상태 정보
+    >
+      {cards.map(card => (
+        <Card key={card.id} column={card} />
+      ))}
+    </div>
+  );
+};
+```
+
+#### 5.2 드롭 타겟 감지 로직
+```typescript
+const findDropTarget = (touch: Touch) => {
+  const elementsUnderTouch = document.elementsFromPoint(
+    touch.clientX,
+    touch.clientY
+  );
+  
+  // 드롭 가능한 영역 찾기
+  return elementsUnderTouch.find(el => 
+    el.classList.contains("droppable-list")
+  ) as HTMLElement | undefined;
+};
+```
+
+#### 5.3 TypeScript 타입 문제 해결
+```typescript
+// types.ts
+type StateType = 'todo' | 'inProgress' | 'done';
+
+// 타입 가드 함수
+const isValidState = (state: string | undefined): state is StateType => {
+  return ['todo', 'inProgress', 'done'].includes(state as string);
+};
+
+// 사용
+const handleDrop = (dropTarget: HTMLElement) => {
+  const targetState = dropTarget.dataset.state;
+  if (targetState && isValidState(targetState)) {
+    moveCard(column.state, targetState, column.id, dropIndex);
+  }
+};
+```
+
+### 6단계: 시각적 피드백 개선
+
+#### 6.1 드래그 중인 카드 스타일
+```typescript
+const applyDragStyles = (clone: HTMLElement) => {
+  clone.style.opacity = "0.8";
+  clone.style.transform = "scale(1.05)";
+  clone.style.boxShadow = "0 5px 15px rgba(0,0,0,0.2)";
+};
+```
+
+#### 6.2 드롭 가능 영역 표시
+```typescript
+const highlightDropTarget = (target: HTMLElement) => {
+  // 이전 하이라이트 제거
+  document.querySelectorAll(".droppable-hover").forEach(el => {
+    el.classList.remove("droppable-hover");
+  });
+  
+  // 새로운 하이라이트 추가
+  target.classList.add("droppable-hover");
+};
+```
+
+#### 6.3 드롭 위치 표시기
+```typescript
+const createDropIndicator = (insertPosition: Element, isAfter: boolean) => {
+  const indicator = document.createElement("div");
+  indicator.className = "drop-indicator w-full h-1 bg-blue-500";
+  
+  if (isAfter) {
+    insertPosition.parentNode?.insertBefore(
+      indicator, 
+      insertPosition.nextSibling
+    );
+  } else {
+    insertPosition.parentNode?.insertBefore(indicator, insertPosition);
+  }
+  
+  return indicator;
+};
+```
+
+### 7단계: 최종 최적화
+
+#### 7.1 성능 최적화
+```typescript
+// 위치 업데이트 최적화
+const optimizedUpdatePosition = (() => {
+  let frameId: number;
+  
+  return (clone: HTMLElement, x: number, y: number) => {
+    if (frameId) {
+      cancelAnimationFrame(frameId);
+    }
+    
+    frameId = requestAnimationFrame(() => {
+      clone.style.top = `${y}px`;
+      clone.style.left = `${x}px`;
+    });
+  };
+})();
+```
+
+#### 7.2 메모리 누수 방지
+```typescript
+const cleanup = () => {
+  // 스크롤 인터벌 정리
+  if (touchRef.current.scrollInterval) {
+    clearInterval(touchRef.current.scrollInterval);
+  }
+  
+  // 클론 제거
+  touchRef.current.clone?.remove();
+  
+  // 원본 요소 복구
+  if (touchRef.current.currentElement) {
+    touchRef.current.currentElement.style.opacity = "";
+  }
+  
+  // 시각적 효과 정리
+  document.querySelectorAll(".droppable-hover").forEach(el => {
+    el.classList.remove("droppable-hover");
+  });
+  document.querySelectorAll(".drop-indicator").forEach(el => {
+    el.remove();
+  });
+};
+```
+
+#### 7.3 에러 처리
+```typescript
+const handleTouchMove = (e: React.TouchEvent) => {
+  try {
+    if (!touchRef.current.clone) return;
+    
+    const touch = e.touches[0];
+    updateClonePosition(/* ... */);
+    handleScroll(touch.clientY);
+    handleDropTarget(touch);
+  } catch (error) {
+    console.error('Error in touch move:', error);
+    cleanup();  // 에러 발생 시 정리
+    setIsDragging(false);
+  }
+};
+```
+
+### 8단계: 테스트 및 디버깅
+
+#### 8.1 주요 테스트 케이스
+```typescript
+// 위치 계산 테스트
+const testPositionCalculation = () => {
+  const touch = { clientX: 100, clientY: 100 };
+  const offset = { x: 10, y: 10 };
+  const expected = { x: 90, y: 90 };
+  
+  const result = calculatePosition(touch, offset);
+  console.assert(
+    result.x === expected.x && result.y === expected.y,
+    'Position calculation failed'
+  );
+};
+
+// 스크롤 영역 테스트
+const testScrollArea = () => {
+  const viewport = 800;
+  const touchY = 50;
+  const { top, bottom } = isInScrollArea(touchY, viewport);
+  
+  console.assert(top === true, 'Should detect top scroll area');
+  console.assert(bottom === false, 'Should not detect bottom scroll area');
+};
+```
+
+이러한 상세한 구현 과정을 거쳐 안정적이고 사용자 친화적인 모바일 드래그앤드롭 기능을 구현할 수 있었습니다. 각 단계에서 발생하는 문제들을 해결하면서 코드의 품질과 사용자 경험을 지속적으로 개선했습니다.

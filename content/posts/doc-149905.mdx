@@ -1,0 +1,302 @@
+---
+title: "Coloris.js 커스터마이징"
+date: 2025-03-19
+island: library
+room: frontend
+tags: []
+---
+## 부모 요소 설정 문제
+
+Coloris.js 색상 선택기 라이브러리의 `parent` 옵션 문제
+
+```javascript
+// The default behavior is to append the color picker's dialog to the end of the document's
+// body. but it is possible to append it to a custom parent instead. This is especially useful
+// when the color fields are in a scrollable container and you want the color picker's dialog
+// to remain anchored to them. You will need to set the CSS position of the desired container
+// to "relative" or "absolute".
+// The value of this option can be either a CSS selector or an HTMLElement/Element/Node.
+// Note: This should be a scrollable container with enough space to display the picker.
+parent: '.container',
+```
+
+이 코드에 대한 설명:
+
+- 색상 선택기는 기본적으로 문서의 body 끝에 추가됨
+- 사용자 지정 부모 요소에 추가 가능
+- 이는 스크롤 가능한 컨테이너 내 색상 필드가 있고 선택기를 그에 고정시키고 싶을 때 유용
+- 원하는 컨테이너의 CSS position 속성을 "relative" 또는 "absolute"로 설정해야 함
+- 이 옵션에는 CSS 선택자나 HTMLElement/Element/Node를 사용할 수 있음
+
+## 대시보드 UI에서의 문제
+
+사용자는 `.ib-sidebar-content`를 부모로 설정했을 때 대시보드 화면에서 색상 선택기가 이상하게 표시되는 문제를 겪고 있었습니다:
+
+```javascript
+Coloris({
+  el: '.coloris, [data-coloris]',
+  themeMode: 'light',
+  alpha: true,
+  format: 'hex',
+  focusInput: true,
+  formatToggle: false,
+  clearLabel: 'Clear',
+  selectInput: true,
+  inline: false,
+  closeButton: true,
+  clearButton: true,
+  parent: '.ib-sidebar-content',  // 문제가 되는 부분
+  wrap: true,
+  margin: 2,
+  swatches: [
+    '#264653',
+    '#2a9d8f',
+    '#e9c46a',
+    '#f4a261',
+    '#e76f51'
+  ]
+});
+```
+
+### 제안된 해결책:
+
+1. **부모 설정 변경**:
+    
+    ```javascript
+    parent: 'body'  // 또는 이 옵션 제거
+    ```
+    
+2. **부모 요소의 CSS 설정 추가**:
+    
+    ```css
+    .ib-sidebar-content {
+      position: absolute; /* 또는 relative */
+    }
+    ```
+    
+3. **스크롤 이벤트 처리**:
+    
+    ```javascript
+    document.addEventListener('scroll', function() {
+      Coloris.close();
+    }, true);
+    ```
+    
+
+## 입력 필드 숨기기와 썸네일만 표시하기
+
+사용자가 입력 필드를 숨기고 색상 썸네일만 표시하고 싶다는 요청
+
+```html
+<div class="color-pickers ${(item?.value)?"":"hidden"}" >
+  <input type="text" name="${item.name}" value="${(item?.value)?item.value:"#000000"}" class="coloris" data-coloris disabled>
+</div>
+```
+
+### 제안된 CSS 해결책:
+
+```css
+/* input 필드 숨기기 */
+.coloris {
+  width: 0;
+  height: 0;
+  padding: 0;
+  border: 0;
+  position: absolute;
+  visibility: hidden; /* 이 방법은 문제될 수 있음 */
+}
+
+/* 대신 색상 표시 박스만 보이게 하기 */
+.clr-field {
+  display: inline-block;
+}
+
+.clr-field button {
+  display: block;
+  width: 30px;
+  height: 30px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+```
+
+중요 참고사항: `visibility: hidden`을 사용하면 Coloris가 제대로 작동하지 않을 수 있습니다.
+
+### 다른 방법:
+
+```css
+.clr-field input[type="text"] {
+  width: 0;
+  height: 0;
+  padding: 0;
+  border: 0;
+  margin: 0;
+  opacity: 0;
+  position: absolute;
+  pointer-events: none;
+}
+```
+
+## 다양한 썸네일 스타일
+
+사용자는 다양한 썸네일 스타일에 대한 정보를 요청했습니다:
+
+### 전체 크기 썸네일:
+
+```css
+.clr-field button {
+  width: 250px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+```
+
+### 원형 썸네일:
+
+```css
+/* 색상 필드 컨테이너 스타일링 */
+.clr-field {
+  display: flex;
+  align-items: center;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 2px;
+  background-color: white;
+  width: fit-content;
+}
+
+/* 원형 썸네일 버튼 */
+.clr-field button {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%; /* 원형으로 만들기 */
+  margin-right: 8px;
+  cursor: pointer;
+  border: none;
+}
+```
+
+## 인라인 모드 활용
+
+사용자는 Coloris의 인라인 모드에 대한 정보를 확인했습니다:
+
+```javascript
+// Set to true to use the color picker as an inline widget. In this mode the color picker is
+// always visible and positioned statically within its container, which is by default the body
+// of the document. Use the "parent" option to set a custom container.
+// Note: In this mode, the best way to get the picked color, is listening to the "coloris:pick"
+// event and reading the value from the event detail (See example in the Events section). The
+// other way is to read the value of the input field with the id "clr-color-value".
+```
+
+인라인 모드에서는:
+
+1. 색상 선택기가 항상 보임 (클릭하여 열고 닫지 않음)
+2. 정적으로 위치하며 컨테이너 내에 배치됨
+3. 기본적으로 문서의 body가 컨테이너가 됨
+4. `parent` 옵션으로 사용자 지정 컨테이너 설정 가능
+
+```javascript
+Coloris({
+  inline: true,
+  parent: '.color-picker-container',
+  defaultColor: '#ff0000'
+});
+
+// 색상 선택 이벤트 리스닝
+document.addEventListener('coloris:pick', function(event) {
+  console.log('선택된 색상:', event.detail.color);
+});
+```
+
+## UI 이슈 해결
+
+### 토글 스위치와 함께 표시되는 문제:
+
+```css
+/* 토글 스위치 숨기기 */
+.clr-field .some-toggle-class {
+  display: none !important;
+}
+```
+
+### focus 상태에서 요소 숨기기:
+
+```css
+/* focus 상태일 때 input 주변의 UI 요소 숨기기 */
+.clr-field input:focus + button,
+.clr-field:focus-within button {
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+```
+
+## 동적 색상 값 설정
+
+### 직접 설정:
+
+```javascript
+document.querySelector(".ib-sidebar-content-card-body-column .bg-color.coloris").value="#ffffff";
+```
+
+### 완전한 업데이트 방법:
+
+```javascript
+// 값 설정
+const colorInput = document.querySelector(".ib-sidebar-content-card-body-column .bg-color.coloris");
+colorInput.value = "#ffffff";
+
+// 입력 이벤트 발생시켜 Coloris가 UI를 업데이트하도록 함
+colorInput.dispatchEvent(new Event('input', { bubbles: true }));
+```
+
+### 썸네일도 함께 업데이트:
+
+```javascript
+// 입력 필드 값 변경
+const colorInput = document.querySelector(".ib-sidebar-content-card-body-column .bg-color.coloris");
+colorInput.value = "#ffffff";
+
+// 썸네일 버튼을 직접 찾아서 스타일 업데이트
+const colorField = colorInput.closest('.clr-field');
+if (colorField) {
+  const thumbnailButton = colorField.querySelector('button');
+  if (thumbnailButton) {
+    thumbnailButton.style.backgroundColor = "#ffffff";
+  }
+}
+```
+
+### UI에 직접 스타일 적용:
+
+```css
+/* 특정 색상 값으로 썸네일 배경 강제 설정 */
+.clr-field button {
+  background-color: #ffffff !important;
+}
+```
+
+혹은 더 구체적인 선택자 사용:
+
+```css
+.ib-sidebar-content-card-body-column .bg-color.coloris + button,
+.ib-sidebar-content-card-body-column .bg-color.coloris ~ button {
+  background-color: #ffffff !important;
+}
+```
+
+## 정리
+
+Coloris.js 색상 선택기를 다양한 방식으로 커스터마이징하는 방법을 살펴보았습니다:
+
+1. 부모 요소 설정 및 관련 이슈 해결
+2. 입력 필드 숨기기와 썸네일만 표시하기
+3. 다양한 썸네일 스타일 적용 (원형, 전체 크기)
+4. 인라인 모드 활용
+5. UI 이슈 해결 (토글 스위치, focus 상태)
+6. 동적 색상 값 설정 및 썸네일 업데이트
+
+Coloris.js는 기본 설정만으로도 유용하지만, CSS와 JavaScript를 활용하면 다양한 사용자 경험을 만들 수 있습니다.

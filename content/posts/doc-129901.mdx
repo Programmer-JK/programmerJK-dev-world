@@ -1,0 +1,33 @@
+---
+title: "레이아웃, 표시 관련 속성"
+date: 2024-11-19
+island: library
+room: frontend
+tags: []
+---
+**인라인/블록 관련**
+- `inline`: 텍스트처럼 흐름. width/height 설정 불가
+- `inline-block`: 인라인 흐름 + 블록 속성(width/height) 설정 가능
+- `block`: 새 줄에서 시작, 전체 너비 차지
+
+**공백 처리**
+- `whitespace-nowrap`: 모든 줄바꿈 방지
+- `whitespace-normal`: 기본값, 자동 줄바꿈
+- `whitespace-pre`: 입력된 공백/줄바꿈 유지
+- `whitespace-pre-wrap`: pre + 자동 줄바꿈
+- `whitespace-pre-line`: 줄바꿈만 유지, 공백은 무시
+
+**텍스트 줄바꿈**
+- `break-normal`: 단어 단위로 줄바꿈
+- `break-words`: 단어 중간이라도 줄바꿈
+- `break-all`: 모든 문자에서 줄바꿈 가능
+- `truncate`: 말줄임(...) 처리
+- `text-wrap`: 컨테이너 크기에 맞춰 자동 줄바꿈
+- `overflow-wrap`: break-words와 유사하나 컨테이너 넘칠 때만 작동
+
+사용 예시:
+1. 긴 URL: `break-all`
+2. 고정 너비 내 텍스트: `truncate`
+3. 버튼 레이블: `whitespace-nowrap`
+4. 본문 텍스트: `break-normal` or `text-wrap`
+5. 코드 블록: `whitespace-pre`

@@ -1,0 +1,104 @@
+---
+title: "CSS에서의 Content 속성 활용 방법"
+date: 2025-03-26
+island: library
+room: frontend
+tags: ["CSS", "Pseudo Element"]
+---
+웹 개발을 하다 보면 CSS의 다양한 속성들을 활용하게 됩니다. 그 중에서도 `content` 속성은 많은 개발자들이 혼란스러워하는 속성 중 하나입니다. 특히 중첩된 스타일을 작성할 때 이 속성을 어떻게 활용해야 하는지 알아보겠습니다.
+
+## Content 속성의 기본 이해
+
+`content` 속성은 CSS에서 요소에 콘텐츠를 추가하는 데 사용됩니다. 하지만 모든 HTML 요소에 직접 적용할 수 있는 것은 아닙니다.
+
+```css
+/* 잘못된 사용법 */
+button {
+  content: "\003E"; /* 이것은 작동하지 않습니다 */
+}
+```
+
+## 의사 요소(Pseudo-elements)와 Content
+
+`content` 속성은 반드시 `::before`나 `::after`와 같은 의사 요소(pseudo-elements)와 함께 사용해야 합니다.
+
+```css
+/* 올바른 사용법 */
+button::before {
+  content: "\003E";
+}
+```
+
+의사 요소는 선택한 요소의 특정 부분에 스타일을 적용할 수 있게 해주는 선택자입니다. `::before`는 선택한 요소의 첫 번째 자식으로, `::after`는 마지막 자식으로 가상의 요소를 생성합니다.
+
+## 순수 CSS vs. 전처리기(SCSS/SASS)
+
+### 순수 CSS에서의 중첩 선택자
+
+순수 CSS에서는 중첩된 선택자를 직접 작성할 수 없으며, 각 선택자를 개별적으로 정의해야 합니다.
+
+```css
+/* 순수 CSS에서의 올바른 방식 */
+.parent {
+  background-color: #ffabab;
+}
+
+.parent button {
+  border-radius: 5px;
+}
+
+.parent button::before {
+  content: "\003E";
+}
+```
+
+### 전처리기에서의 중첩 선택자
+
+SCSS나 SASS와 같은 CSS 전처리기를 사용하면 중첩된 방식으로 스타일을 작성할 수 있어 가독성과 유지보수성이 향상됩니다.
+
+```scss
+/* SCSS에서의 올바른 방식 */
+.parent {
+  background-color: #ffabab;
+  
+  button {
+    border-radius: 5px;
+    
+    &::before {
+      content: "\003E";
+    }
+  }
+}
+```
+
+## 실제 사례: 버튼에 화살표 아이콘 추가하기
+
+다음은 버튼에 화살표 아이콘(>)을 추가하는 예시입니다.
+
+```css
+/* 순수 CSS */
+.ib-sidebar>.ib-sidebar-content .data-list-item {
+  background-color: #ffabab;
+}
+
+.ib-sidebar>.ib-sidebar-content .data-list-item button {
+  border-radius: 5px;
+  display: flex;
+  justify-items: center;
+  align-items: center;
+  background-color: #ffabab;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.ib-sidebar>.ib-sidebar-content .data-list-item button::before {
+  content: "\003E"; /* 유니코드로 > 기호 표시 */
+}
+```
+
+## 결론
+
+CSS의 `content` 속성은 강력한 도구이지만, 오직 의사 요소(`::before`, `::after`)와 함께 사용해야만 합니다. HTML 요소 자체에는 직접 `content` 속성을 적용할 수 없으며, 요소의 내용은 HTML 마크업을 통해 제공되어야 합니다.
+
+CSS 전처리기를 사용하면 중첩된 스타일 작성이 가능하지만, `content` 속성의 사용 규칙은 여전히 동일하게 적용됩니다. 이러한 이해를 바탕으로 CSS를 올바르게 활용하면 더 효율적인 웹 개발이 가능해집니다.

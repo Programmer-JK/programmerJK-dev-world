@@ -1,0 +1,127 @@
+---
+title: "LangChain 프롬프트 템플릿 정리"
+date: 2025-10-24
+island: library
+room: ai
+tags: ["LangChain", "Prompt"]
+---
+## 들어가며
+
+최근 AI 애플리케이션 개발에서 LangChain의 프롬프트 엔지니어링이 주목받고 있습니다. ChatGPT와 같은 대화형 AI의 급속한 발전으로 인해 많은 개발자들이 관심을 갖고 있지만, 체계적인 프롬프트 관리 방법을 이해하기 어려운 것도 사실입니다.
+
+이 글에서는 LangChain의 프롬프트 시스템 핵심 개념부터 실제 활용 방법까지 정리해보겠습니다.
+
+## LangChain 프롬프트 시스템이란?
+
+### 기본 개념
+
+LangChain의 프롬프트 시스템은 대화형 AI와의 상호작용을 체계적으로 관리하기 위한 메시지 구조화 프레임워크입니다.
+
+### 등장 배경
+
+- **기존 문제**: AI와의 대화에서 역할과 컨텍스트가 명확하지 않아 일관성 있는 응답을 얻기 어려움
+- **해결 방식**: 메시지 타입을 명확히 분리하고 템플릿을 통해 재사용 가능한 프롬프트 구조 제공
+
+### 핵심 특징
+
+1. **타입 기반 메시지 관리**: System, Human, AI, Tool 메시지로 역할을 명확히 구분
+2. **템플릿 시스템**: 재사용 가능한 프롬프트 패턴 제공
+3. **체인 연결**: 복잡한 대화 플로우를 단계별로 구성 가능
+
+## 동작 원리
+
+### 기본 구조
+
+LangChain의 프롬프트 시스템은 BaseMessage를 상속받는 4가지 메시지 타입으로 구성됩니다.
+
+```python
+from langchain.schema import SystemMessage, HumanMessage, AIMessage
+from langchain.prompts import PromptTemplate
+
+# 기본 메시지 구성
+messages = [
+    SystemMessage(content="당신은 친절한 AI 어시스턴트입니다."),
+    HumanMessage(content="파이썬에 대해 설명해주세요."),
+    AIMessage(content="파이썬은 간단하고 읽기 쉬운 프로그래밍 언어입니다.")
+]
+```
+
+### 주요 구성 요소
+
+- **SystemMessage**: LLM 애플리케이션의 목적과 역할을 정의하는 지시사항
+- **HumanMessage**: 사용자가 입력한 실제 질문이나 요청사항
+- **AIMessage**: LLM이 생성한 응답 메시지
+- **ToolMessage**: Agent 시스템에서 외부 도구 실행 결과를 전달하는 메시지
+
+## 기존 기술과의 차이점
+
+|비교 항목|기존 방식|LangChain 프롬프트|
+|---|---|---|
+|메시지 구조|단순 문자열|타입 기반 구조화|
+|재사용성|하드코딩|템플릿 시스템|
+|역할 구분|명시적 구분 없음|명확한 역할 분리|
+|복잡한 플로우|순차적 처리|체인 기반 연결|
+
+### 언제 사용해야 할까?
+
+✅ **사용하면 좋은 경우**
+
+- 복잡한 대화형 AI 애플리케이션 개발
+- 다양한 역할을 가진 AI 에이전트 구현
+- 프롬프트의 재사용성과 유지보수성이 중요한 프로젝트
+- 외부 도구와 연동하는 AI 시스템
+
+❌ **사용하지 않는 것이 좋은 경우**
+
+- 단순한 일회성 질문-답변 시스템
+- 프로토타입 단계의 간단한 테스트
+- LangChain 생태계와 무관한 다른 프레임워크 사용 시
+
+## 실전 예시
+
+### 간단한 구현
+
+```python
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema import SystemMessage, HumanMessage
+
+# 코드 리뷰 전용 프롬프트 템플릿
+code_review_template = ChatPromptTemplate.from_messages([
+    SystemMessage(content="""
+    당신은 숙련된 시니어 개발자입니다. 
+    코드를 리뷰할 때 다음 관점에서 피드백을 제공하세요:
+    1. 코드 품질 및 가독성
+    2. 성능 최적화 가능성
+    3. 보안 이슈
+    4. 베스트 프랙티스 준수 여부
+    """),
+    HumanMessage(content="다음 코드를 리뷰해주세요:\n{code}")
+])
+
+# 사용 예시
+prompt = code_review_template.format_messages(
+    code="""
+def calculate_total(items):
+    total = 0
+    for item in items:
+        total += item['price'] * item['quantity']
+    return total
+    """
+)
+```
+
+### 활용 사례
+
+1. **고객 서비스 챗봇**: SystemMessage로 브랜드 톤앤매너 설정, HumanMessage로 고객 문의 처리
+2. **코드 생성 도구**: SystemMessage로 프로그래밍 언어와 스타일 가이드 지정, HumanMessage로 구현 요구사항 전달
+
+## 마무리
+
+LangChain의 프롬프트 시스템은 체계적이고 재사용 가능한 AI 대화 관리를 제공하는 기술입니다. 특히 복잡한 비즈니스 로직을 가진 AI 애플리케이션에서 큰 도움이 될 것 같습니다.
+
+더 자세한 학습을 원한다면 LangChain 공식 문서의 프롬프트 엔지니어링 가이드를 참고해보세요.
+
+### 참고 자료
+
+- [LangChain 공식 문서 - Prompts](https://python.langchain.com/docs/modules/model_io/prompts/)
+- [LangChain 프롬프트 템플릿 튜토리얼](https://python.langchain.com/docs/modules/model_io/prompts/prompt_templates/)

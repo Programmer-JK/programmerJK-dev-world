@@ -1,0 +1,266 @@
+---
+title: "코테 꿀팁"
+date: 2025-01-17
+island: library
+room: algo
+tags: []
+---
+JavaScript로 코딩 테스트를 볼 때 유용한 팁들을 알려드리겠습니다:
+
+1. 자주 사용하는 배열 메서드 활용하기
+```javascript
+// map: 배열의 각 요소 변환
+const numbers = [1, 2, 3];
+const doubled = numbers.map(x => x * 2); // [2, 4, 6]
+
+// filter: 조건에 맞는 요소만 필터링
+const filtered = numbers.filter(x => x > 1); // [2, 3]
+
+// reduce: 배열의 모든 요소를 하나의 값으로 줄이기
+const sum = numbers.reduce((acc, curr) => acc + curr, 0); // 6
+```
+
+2. Set과 Map 자료구조 활용
+```javascript
+// 중복 제거할 때는 Set
+const uniqueArray = [...new Set([1, 1, 2, 2, 3])]; // [1, 2, 3]
+
+// 키-값 쌍으로 데이터 관리할 때는 Map
+const map = new Map();
+map.set('key', 'value');
+```
+
+3. 문자열 처리 팁
+```javascript
+// 문자열을 배열로 변환
+const str = "hello";
+const chars = [...str]; // ['h', 'e', 'l', 'l', 'o']
+
+// 숫자로 변환
+const num = parseInt("123"); // 문자열 -> 정수
+const float = parseFloat("123.45"); // 문자열 -> 실수
+```
+
+4. 정렬 시 주의사항
+```javascript
+// 숫자 정렬할 때는 비교 함수 필수
+const nums = [1, 10, 2, 20];
+nums.sort((a, b) => a - b); // [1, 2, 10, 20]
+```
+
+5. 효율적인 반복문 사용
+```javascript
+// for...of: 배열의 값을 순회할 때
+for (const value of array) {
+    // value 사용
+}
+
+// for...in: 객체의 키를 순회할 때
+for (const key in object) {
+    // key 사용
+}
+```
+
+6. 유용한 Math 함수들
+```javascript
+Math.max(...array); // 최댓값
+Math.min(...array); // 최솟값
+Math.abs(-5); // 절대값
+Math.floor(3.7); // 내림
+Math.ceil(3.2); // 올림
+Math.round(3.5); // 반올림
+```
+
+7. 디버깅 팁
+```javascript
+// 중간 결과 확인
+console.log('중간 결과:', 변수);
+
+// 객체 구조 자세히 보기
+console.dir(객체);
+```
+
+8. 시간 복잡도를 고려한 자료구조 선택
+- 검색이 많은 경우: Map이나 Set 사용 (O(1))
+- 정렬이 필요한 경우: Array.sort() 사용 (O(n log n))
+- 중복 제거: Set 사용
+
+추가로 풀어보면 좋을 연습:
+- 투 포인터 알고리즘
+- DFS/BFS 구현
+- 이진 탐색
+- 동적 프로그래밍
+
+코딩 테스트 중에는 시간이 부족할 수 있으므로, 이러한 기본적인 메서드들과 패턴들을 미리 연습해두시면 좋습니다.
+
+각각의 알고리즘에 대해 JavaScript 예제와 함께 설명해드리겠습니다:
+
+1. 투 포인터 알고리즘
+```javascript
+// 정렬된 배열에서 두 수의 합이 target이 되는 쌍 찾기
+function findPairSum(arr, target) {
+    let left = 0;
+    let right = arr.length - 1;
+    
+    while (left < right) {
+        const sum = arr[left] + arr[right];
+        if (sum === target) {
+            return [left, right];
+        } else if (sum < target) {
+            left++;
+        } else {
+            right--;
+        }
+    }
+    return null;
+}
+
+// 사용 예
+const arr = [1, 2, 3, 4, 5, 6];
+console.log(findPairSum(arr, 8)); // [2, 5] (3 + 6 = 9)
+```
+
+2. DFS/BFS 구현
+```javascript
+// 그래프를 인접 리스트로 표현
+const graph = {
+    A: ['B', 'C'],
+    B: ['A', 'D', 'E'],
+    C: ['A', 'F'],
+    D: ['B'],
+    E: ['B', 'F'],
+    F: ['C', 'E']
+};
+
+// DFS (깊이 우선 탐색) - 재귀
+function dfs(graph, start, visited = new Set()) {
+    visited.add(start);
+    console.log(start);
+    
+    for (const neighbor of graph[start]) {
+        if (!visited.has(neighbor)) {
+            dfs(graph, neighbor, visited);
+        }
+    }
+}
+
+// BFS (너비 우선 탐색) - 큐 사용
+function bfs(graph, start) {
+    const visited = new Set([start]);
+    const queue = [start];
+    
+    while (queue.length > 0) {
+        const vertex = queue.shift();
+        console.log(vertex);
+        
+        for (const neighbor of graph[vertex]) {
+            if (!visited.has(neighbor)) {
+                visited.add(neighbor);
+                queue.push(neighbor);
+            }
+        }
+    }
+}
+```
+
+3. 이진 탐색
+```javascript
+// 반복문을 사용한 이진 탐색
+function binarySearch(arr, target) {
+    let left = 0;
+    let right = arr.length - 1;
+    
+    while (left <= right) {
+        const mid = Math.floor((left + right) / 2);
+        
+        if (arr[mid] === target) {
+            return mid;
+        } else if (arr[mid] < target) {
+            left = mid + 1;
+        } else {
+            right = mid - 1;
+        }
+    }
+    return -1;
+}
+
+// 재귀를 사용한 이진 탐색
+function binarySearchRecursive(arr, target, left = 0, right = arr.length - 1) {
+    if (left > right) return -1;
+    
+    const mid = Math.floor((left + right) / 2);
+    
+    if (arr[mid] === target) return mid;
+    if (arr[mid] < target) {
+        return binarySearchRecursive(arr, target, mid + 1, right);
+    }
+    return binarySearchRecursive(arr, target, left, mid - 1);
+}
+```
+
+4. 동적 프로그래밍 (피보나치 예제)
+```javascript
+// 메모이제이션을 사용한 피보나치
+function fibonacci(n, memo = {}) {
+    if (n in memo) return memo[n];
+    if (n <= 1) return n;
+    
+    memo[n] = fibonacci(n - 1, memo) + fibonacci(n - 2, memo);
+    return memo[n];
+}
+
+// 타뷸레이션을 사용한 피보나치
+function fibonacciTab(n) {
+    if (n <= 1) return n;
+    
+    const dp = new Array(n + 1);
+    dp[0] = 0;
+    dp[1] = 1;
+    
+    for (let i = 2; i <= n; i++) {
+        dp[i] = dp[i-1] + dp[i-2];
+    }
+    
+    return dp[n];
+}
+
+// 최장 증가 부분 수열(LIS) 구하기
+function getLIS(arr) {
+    const dp = new Array(arr.length).fill(1);
+    
+    for (let i = 1; i < arr.length; i++) {
+        for (let j = 0; j < i; j++) {
+            if (arr[i] > arr[j]) {
+                dp[i] = Math.max(dp[i], dp[j] + 1);
+            }
+        }
+    }
+    
+    return Math.max(...dp);
+}
+```
+
+각 알고리즘의 주요 특징:
+
+투 포인터:
+- 배열의 두 지점을 가리키는 포인터를 활용
+- 정렬된 배열에서 효율적
+- 공간 복잡도 O(1)로 최적화 가능
+
+DFS/BFS:
+- DFS: 스택 또는 재귀로 구현, 깊이 우선
+- BFS: 큐로 구현, 너비 우선
+- 그래프/트리 탐색에 유용
+
+이진 탐색:
+- 정렬된 배열에서만 사용 가능
+- 시간 복잡도 O(log n)
+- left, right, mid 포인터 활용
+
+동적 프로그래밍:
+- 메모이제이션: 하향식 접근
+- 타뷸레이션: 상향식 접근
+- 중복 계산 제거로 효율성 향상
+- 부분 문제의 최적해로 전체 문제 해결
+
+이러한 알고리즘들은 코딩 테스트에서 자주 출제되므로, 각각의 패턴을 잘 익혀두시면 좋습니다.

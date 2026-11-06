@@ -1,0 +1,90 @@
+---
+title: "img태그 crossOrigin속성을 통한 cors해결"
+date: 2025-04-14
+island: library
+room: frontend
+tags: []
+---
+`crossOrigin = "anonymous"` 속성은 **CORS 관련 문제를 해결할 수 있는 중요한 열쇠** 중 하나입니다.
+
+하지만 이 또한 완벽한 해결방법이라 할 수 없습니다. 그걸 지금부터 기술하고자 합니다.
+
+---
+
+## ✅ `crossOrigin = "anonymous"`의 역할
+
+### HTML 이미지 태그에서:
+```html
+<img src="https://example.com/image.png" crossorigin="anonymous" />
+```
+
+### JavaScript에서:
+```js
+const img = new Image();
+img.crossOrigin = "anonymous";
+img.src = "https://example.com/image.png";
+```
+
+> 이 속성은 브라우저가 **해당 이미지를 CORS 요청(Credential 없이)**으로 불러오도록 지시합니다.
+
+---
+
+## ✅ 언제 해결이 되는가?
+
+`crossOrigin = "anonymous"`가 제대로 작동하려면:
+
+1. **이미지를 호스팅하는 서버가 다음 헤더를 포함해야 함:**
+   ```
+   Access-Control-Allow-Origin: *
+   ```
+   또는
+   ```
+   Access-Control-Allow-Origin: [요청 origin]
+   ```
+
+2. 그리고 **응답이 CORS를 허용하는 상태여야 함** (옵션 요청이 통과돼야 함)
+
+---
+
+## ❌ 언제 해결이 안 되는가?
+
+- 이미지 서버가 `Access-Control-Allow-Origin` 헤더를 **설정하지 않았거나**, `null` 또는 특정 도메인만 허용한 경우
+- 이미지 서버가 CORS 요청 자체를 거부하는 경우 (403, 404 반환 등)
+- S3 등에서 **퍼블릭 설정은 되어 있어도 CORS는 비활성화**된 경우
+
+---
+
+## 🔥 정리: crossOrigin="anonymous"는 해결 방법이자 신호
+
+| 상황 | 해결 여부 | 설명 |
+|------|-----------|------|
+| 서버가 CORS 허용함 | ✅ 해결됨 | Canvas, Base64, html-to-image 모두 정상 작동 |
+| 서버가 CORS 미설정 | ❌ 실패 | 여전히 `SecurityError` 발생 |
+| crossOrigin 생략 | ❌ 실패 | 기본적으로 CORS 안 쓰고 로드됨 → 캔버스 타락 |
+| crossOrigin="use-credentials" | 🚫 일반적으론 사용 안 함 | 인증 정보 필요한 경우만 사용, 실패 가능성 큼 |
+
+---
+
+## 💡 실전 팁
+
+```js
+const img = new Image();
+img.crossOrigin = "anonymous";
+img.onload = () => {
+  const canvas = document.createElement("canvas");
+  canvas.width = img.width;
+  canvas.height = img.height;
+  canvas.getContext("2d").drawImage(img, 0, 0);
+  const base64 = canvas.toDataURL();
+  console.log(base64);
+};
+img.onerror = () => {
+  console.error("이미지를 불러오지 못했습니다.");
+};
+img.src = "https://example.com/image.png";
+```
+
+---
+
+**결론**  
+`crossOrigin = "anonymous"`는 **반드시 설정해야 할 옵션**이지만, **이미지 서버가 CORS를 허용해야만** 효과가 있습니다.

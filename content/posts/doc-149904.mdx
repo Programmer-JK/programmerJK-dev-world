@@ -1,0 +1,193 @@
+---
+title: "Capacitor"
+summary: "Capacitor의 특징, 설치 방법, 주요 기능, 시스템 아키텍처 및 모범 사례에 대한 포괄적 가이드"
+date: 2025-02-10
+island: library
+room: frontend
+tags: ["Capacitor", "크로스플랫폼", "모바일앱개발", "하이브리드앱"]
+---
+## 개요
+
+Capacitor는 Ionic 팀에서 개발한 크로스 플랫폼 앱 개발 프레임워크입니다. 웹 기술(HTML, CSS, JavaScript)을 사용하여 iOS, Android, 데스크톱용 네이티브 앱을 개발할 수 있게 해주는 도구입니다.
+
+## 주요 기능
+
+### 1. 크로스 플랫폼 지원
+- iOS, Android, 웹 등 다양한 플랫폼 지원
+- 하나의 코드베이스로 여러 플랫폼 앱 개발 가능
+- PWA(Progressive Web Apps) 기본 지원
+
+### 2. 네이티브 기능 접근
+- 카메라, GPS, 푸시 알림 등 네이티브 API 제공
+- JavaScript 인터페이스를 통한 네이티브 기능 접근
+- 플러그인 시스템을 통한 기능 확장 가능
+
+### 3. 기술 스택
+- HTML, CSS, JavaScript/TypeScript 기반 개발
+- React, Vue, Angular 등 주요 프레임워크 호환
+- npm 기반의 패키지 관리
+
+## 시스템 아키텍처
+
+```javascript
+// 네이티브 API 사용 예시
+import { Camera } from '@capacitor/camera';
+
+const takePicture = async () => {
+  const image = await Camera.getPhoto({
+    quality: 90,
+    allowEditing: true,
+    resultType: 'uri'
+  });
+};
+```
+
+## 기술적 특징
+
+1. 웹뷰 기반 실행
+2. 네이티브 브리지를 통한 디바이스 기능 접근
+3. 모던 웹 표준 지원
+4. 타입스크립트 지원
+5. 자동 업데이트 지원
+
+## 설치 및 설정
+
+```bash
+# 새 프로젝트 생성
+npm init @capacitor/app
+
+# 기존 프로젝트에 Capacitor 추가
+npm install @capacitor/core @capacitor/cli
+npx cap init
+
+# iOS, Android 플랫폼 추가
+npm install @capacitor/ios @capacitor/android
+npx cap add ios
+npx cap add android
+```
+
+## 주요 기능 사용 예시
+
+### 1. 카메라 기능
+
+```javascript
+import { Camera, CameraResultType } from '@capacitor/camera';
+
+async function takePicture() {
+  const image = await Camera.getPhoto({
+    quality: 90,
+    allowEditing: true,
+    resultType: CameraResultType.Uri
+  });
+
+  // 이미지 URL 사용
+  const imageUrl = image.webPath;
+}
+```
+
+### 2. 위치 정보 접근
+
+```javascript
+import { Geolocation } from '@capacitor/geolocation';
+
+async function getCurrentPosition() {
+  const coordinates = await Geolocation.getCurrentPosition();
+
+  console.log('Current position:', coordinates);
+  console.log('Latitude:', coordinates.coords.latitude);
+  console.log('Longitude:', coordinates.coords.longitude);
+}
+```
+
+### 3. 로컬 저장소 사용
+
+```javascript
+import { Preferences } from '@capacitor/preferences';
+
+async function storeUserData() {
+  await Preferences.set({
+    key: 'userData',
+    value: JSON.stringify({
+      id: 1,
+      name: 'John Doe'
+    })
+  });
+}
+
+async function getUserData() {
+  const { value } = await Preferences.get({ key: 'userData' });
+  return JSON.parse(value);
+}
+```
+
+### 4. 푸시 알림
+
+```javascript
+import { PushNotifications } from '@capacitor/push-notifications';
+
+async function registerNotifications() {
+  // 권한 요청
+  const permission = await PushNotifications.requestPermissions();
+  
+  if (permission.receive === 'granted') {
+    // 푸시 알림 등록
+    await PushNotifications.register();
+  }
+}
+
+// 알림 리스너
+PushNotifications.addListener('pushNotificationReceived',
+  (notification) => {
+    console.log('Push notification received: ', notification);
+  }
+);
+```
+
+### 5. 네트워크 상태 모니터링
+
+```javascript
+import { Network } from '@capacitor/network';
+
+Network.addListener('networkStatusChange', status => {
+  console.log('Network status changed', status.connected);
+});
+
+async function checkNetworkStatus() {
+  const status = await Network.getStatus();
+  console.log('Network status:', status.connected);
+}
+```
+
+## 플랫폼별 빌드 및 실행
+
+```bash
+# 웹 코드를 네이티브 프로젝트에 복사
+npx cap copy
+
+# iOS 시뮬레이터에서 실행
+npx cap open ios
+
+# Android 에뮬레이터에서 실행
+npx cap open android
+```
+
+## 주요 플러그인 목록
+
+- @capacitor/camera: 카메라 기능
+- @capacitor/geolocation: 위치 정보
+- @capacitor/storage: 로컬 저장소
+- @capacitor/push-notifications: 푸시 알림
+- @capacitor/network: 네트워크 상태
+- @capacitor/device: 디바이스 정보
+- @capacitor/app: 앱 상태 및 이벤트
+- @capacitor/haptics: 햅틱 피드백
+- @capacitor/keyboard: 키보드 제어
+- @capacitor/status-bar: 상태바 커스터마이징
+
+## Cordova와의 차이점
+
+1. 현대화된 웹 표준 지원
+2. 향상된 성능
+3. 간소화된 프로젝트 구조
+4. 개선된 타입 지원
+5. 더 나은 보안 모델

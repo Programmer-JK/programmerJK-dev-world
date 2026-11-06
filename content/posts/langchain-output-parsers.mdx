@@ -1,0 +1,197 @@
+---
+title: "LangChain Output Parser로 구조화된 응답 받기"
+date: 2025-10-24
+island: library
+room: ai
+tags: ["LangChain", "Output Parser", "Pydantic"]
+---
+## 들어가며
+
+최근 LLM 애플리케이션 개발에서 구조화된 출력을 받아야 하는 상황에 직면하게 되어 조사하던 차에  LangChain의 JsonOutputParser와 JsonOutputParser에 대해 알게 되었다. 이 글에서는 JsonOutputParser의 문제점부터 더 나은 대안인 with_structured_output과 Pydantic 활용법까지 정리해보겠습니다.
+
+## JsonOutputParser란?
+
+### 기본 개념
+
+LangChain에서 제공하는 JSON 형태의 구조화된 출력을 파싱하는 도구입니다.
+
+### 등장 배경
+
+- **기존 문제**: LLM의 자유형식 텍스트 출력을 프로그램에서 사용하기 어려움
+- **해결 방식**: JSON 스키마를 정의하고 LLM 출력을 파싱하여 구조화된 데이터로 변환
+
+### 핵심 특징
+
+1. **스키마 기반**: JSON 스키마를 미리 정의하여 출력 형식 지정
+2. **자동 파싱**: LLM 출력을 자동으로 JSON 객체로 변환
+3. **에러 핸들링**: 잘못된 형식의 출력에 대한 기본적인 오류 처리
+
+## 동작 원리
+
+### 기본 구조
+
+JsonOutputParser는 스키마를 프롬프트에 포함시키고, LLM 응답을 JSON으로 파싱합니다.
+
+```python
+from langchain.output_parsers import JsonOutputParser
+from langchain.prompts import PromptTemplate
+
+# 기본 사용법
+parser = JsonOutputParser()
+prompt = PromptTemplate(
+    template="답변을 JSON 형식으로 해주세요:\n{format_instructions}\n{query}",
+    input_variables=["query"],
+    partial_variables={"format_instructions": parser.get_format_instructions()}
+)
+```
+
+### 주요 구성 요소
+
+- **Schema Definition**: JSON 출력 형식 정의
+- **Format Instructions**: LLM에게 전달할 형식 지침
+- **Parser Logic**: 텍스트를 JSON으로 변환하는 로직
+
+## 기존 기술과의 차이점
+
+|비교 항목|JsonOutputParser|with_structured_output + Pydantic|
+|---|---|---|
+|타입 안정성|❌ 런타임에만 검증|✅ 컴파일 타임 + 런타임 검증|
+|IDE 지원|❌ 자동완성 없음|✅ 완전한 IDE 지원|
+|검증 수준|❌ 기본적인 JSON 파싱만|✅ 상세한 데이터 검증|
+|에러 메시지|❌ 모호한 오류|✅ 구체적이고 명확한 오류|
+|성능|⚠️ 문자열 파싱 오버헤드|✅ 최적화된 직렬화|
+
+### 언제 사용해야 할까?
+
+✅ **with_structured_output + Pydantic을 사용하면 좋은 경우**
+
+- 프로덕션 환경에서 안정성이 중요한 경우
+- 복잡한 데이터 구조를 다루는 경우
+- 팀 개발에서 타입 안정성이 필요한 경우
+- IDE 자동완성과 코드 품질을 중시하는 경우
+
+❌ **JsonOutputParser를 사용하지 않는 것이 좋은 경우**
+
+- 데이터 검증이 중요한 애플리케이션
+- 장기간 유지보수할 코드
+- 복잡한 중첩 구조를 다루는 경우
+
+## 실전 예시
+
+### JsonOutputParser (권장하지 않음)
+
+```python
+from langchain.output_parsers import JsonOutputParser
+from langchain.prompts import PromptTemplate
+from langchain.schema import OutputParserException
+
+# 문제가 많은 기존 방식
+parser = JsonOutputParser()
+prompt = PromptTemplate(
+    template="사용자 정보를 JSON으로 추출해주세요:\n{format_instructions}\n{text}",
+    input_variables=["text"],
+    partial_variables={"format_instructions": parser.get_format_instructions()}
+)
+
+# 문제점들:
+# 1. 타입 힌트 없음
+# 2. 런타임 에러 가능성 높음
+# 3. IDE 지원 부족
+```
+
+### with_structured_output + Pydantic (권장)
+
+```python
+from pydantic import BaseModel, Field, validator
+from typing import Optional, List
+from langchain_openai import ChatOpenAI
+
+# 강력한 데이터 모델 정의
+class UserInfo(BaseModel):
+    name: str = Field(description="사용자 이름")
+    age: int = Field(description="나이", ge=0, le=150)
+    email: Optional[str] = Field(description="이메일 주소")
+    skills: List[str] = Field(description="보유 기술", default=[])
+    
+    @validator('email')
+    def validate_email(cls, v):
+        if v and '@' not in v:
+            raise ValueError('올바른 이메일 형식이 아닙니다')
+        return v
+
+# 구조화된 출력 사용
+llm = ChatOpenAI(model="gpt-4")
+structured_llm = llm.with_structured_output(UserInfo)
+
+# 타입 안전한 사용
+result: UserInfo = structured_llm.invoke("김철수는 30세 개발자입니다. Python과 JavaScript를 다룹니다.")
+print(f"이름: {result.name}")  # IDE 자동완성 지원
+print(f"기술: {', '.join(result.skills)}")
+```
+
+### 활용 사례
+
+1. **데이터 추출**: 문서에서 구조화된 정보 추출
+2. **API 응답 생성**: 일관된 형식의 API 응답 보장
+3. **워크플로우 자동화**: 다음 단계로 전달할 구조화된 데이터 생성
+
+## 고급 활용법
+
+### 중첩된 복잡한 구조
+
+```python
+from pydantic import BaseModel
+from typing import List, Dict
+from datetime import datetime
+
+class Address(BaseModel):
+    street: str
+    city: str
+    country: str = "대한민국"
+
+class Company(BaseModel):
+    name: str
+    address: Address
+    founded_year: int
+
+class Person(BaseModel):
+    name: str
+    companies: List[Company]
+    metadata: Dict[str, str] = {}
+    created_at: datetime = Field(default_factory=datetime.now)
+
+# 복잡한 구조도 타입 안전하게 처리
+structured_llm = llm.with_structured_output(Person)
+```
+
+### 에러 핸들링과 재시도
+
+```python
+from pydantic import ValidationError
+import json
+
+def safe_structured_output(llm, schema_class, prompt, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            structured_llm = llm.with_structured_output(schema_class)
+            return structured_llm.invoke(prompt)
+        except ValidationError as e:
+            if attempt == max_retries - 1:
+                raise e
+            # 에러 정보를 포함하여 재시도
+            prompt += f"\n\n검증 오류가 발생했습니다: {e}\n다시 시도해주세요."
+    
+    return None
+```
+
+## 마무리
+
+JsonOutputParser는 초기 프로토타이핑에는 유용할 수 있지만, 프로덕션 환경에서는 with_structured_output과 Pydantic 조합이 훨씬 안정적이고 유지보수하기 좋습니다. 특히 타입 안정성과 데이터 검증이 중요한 애플리케이션에서는 반드시 후자를 사용하는 것을 권장합니다.
+
+더 자세한 학습을 원한다면 Pydantic 공식 문서와 LangChain의 structured output 가이드를 참고해보세요.
+
+### 참고 자료
+
+- [Pydantic 공식 문서](https://docs.pydantic.dev/)
+- [LangChain Structured Output 가이드](https://python.langchain.com/docs/how_to/structured_output/)
+- [OpenAI Function Calling 문서](https://platform.openai.com/docs/guides/function-calling)

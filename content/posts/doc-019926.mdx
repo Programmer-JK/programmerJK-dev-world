@@ -1,0 +1,103 @@
+---
+title: "Axios vs Fetch"
+summary: "HTTP 클라이언트 라이브러리인 Axios와 브라우저 내장 API Fetch의 특징, 차이점 및 활용 사례 비교"
+date: 2025-01-19
+island: library
+room: frontend
+tags: ["JavaScript", "HTTP", "API", "web-development"]
+---
+### Axios란?
+
+Axios는 브라우저와 Node.js 환경에서 사용할 수 있는 Promise 기반의 HTTP 클라이언트 라이브러리입니다. XMLHttpRequest를 추상화하여 더 사용하기 쉬운 API를 제공하며, 다양한 기능과 편의성을 제공합니다.
+
+주요 특징:
+- 요청과 응답 데이터의 자동 변환
+- 요청과 응답을 가로채서 변형할 수 있는 인터셉터 기능
+- 요청 취소와 타임아웃 설정 기능
+- XSRF 보호 기능 내장
+- 진행률 표시 기능
+- JSON 데이터 자동 변환
+
+### Fetch란?
+
+Fetch는 브라우저에 내장된 기본 API로, XMLHttpRequest의 현대적 대안으로 설계되었습니다. Promise 기반으로 작동하며, 네트워크 요청을 보다 강력하고 유연하게 처리할 수 있게 해줍니다.
+
+주요 특징:
+- 브라우저 내장 API로 별도 설치 불필요
+- Promise 기반의 비동기 처리
+- Request와 Response 인터페이스 제공
+- Stream API 지원
+- 심플한 인터페이스
+
+### 주요 차이점
+
+1. **데이터 처리 방식**
+   - Axios: 자동으로 JSON 데이터 변환
+   - Fetch: 수동으로 .json() 메서드를 호출해야 함
+
+2. **에러 처리**
+   - Axios: HTTP 에러 상태를 자동으로 감지하여 catch로 처리
+   - Fetch: HTTP 에러 상태를 수동으로 체크해야 함
+
+3. **기능성**
+   - Axios: 인터셉터, 요청 취소, 타임아웃 등 풍부한 기능 제공
+   - Fetch: 기본적인 기능만 제공, 추가 기능은 직접 구현 필요
+
+4. **브라우저 지원**
+   - Axios: 구형 브라우저 포함 광범위한 지원
+   - Fetch: 현대 브라우저만 지원, 구형 브라우저는 폴리필 필요
+
+### 사용 예시 비교
+
+**기본 GET 요청:**
+```javascript
+// Axios
+axios.get('/api/data')
+  .then(response => console.log(response.data))
+  .catch(error => console.error(error));
+
+// Fetch
+fetch('/api/data')
+  .then(response => response.json())
+  .then(data => console.log(data))
+  .catch(error => console.error(error));
+```
+
+**POST 요청 및 헤더 설정:**
+```javascript
+// Axios
+axios.post('/api/data', {
+  name: 'John'
+}, {
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: 'Bearer token'
+  }
+});
+
+// Fetch
+fetch('/api/data', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: 'Bearer token'
+  },
+  body: JSON.stringify({
+    name: 'John'
+  })
+});
+```
+
+### 선택 기준
+
+1. **Axios 선택이 좋은 경우:**
+   - 자동화된 기능이 많이 필요한 대규모 프로젝트
+   - 광범위한 브라우저 지원이 필요한 경우
+   - 더 풍부한 기능과 에러 처리가 필요한 경우
+   - 인터셉터나 요청 취소 기능이 필요한 경우
+
+2. **Fetch 선택이 좋은 경우:**
+   - 간단한 HTTP 통신이 필요한 소규모 프로젝트
+   - 최신 브라우저만 지원하면 되는 경우
+   - 최소한의 기능만 필요한 경우
+   - 추가 라이브러리 의존성을 피하고 싶은 경우

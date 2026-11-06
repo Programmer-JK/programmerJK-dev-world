@@ -1,0 +1,22 @@
+---
+title: "네트워크 패킷"
+summary: "네트워크 패킷의 구조, 프로토콜 계층화, 캡슐화와 역캡슐화 과정 설명"
+date: 2024-11-10
+island: library
+room: devops
+tags: ["network-packet", "encapsulation", "protocols", "network-headers", "data-transmission", "packet-structure"]
+---
+## 네트워크 패킷
+- 패킷 : 데이터와 프로토콜의 집합
+	- 헤더 : 프로토콜
+	- 페이로드 : 보낼 데이터
+	- 푸터 : 오류를 점검하기 위한 값
+
+- 패킷의 헤더는 HTTP -> TCP -> IPv4 -> Ethernet 순으로 추가된다
+	- HTTP : 웹 서버와 웹 클라이언트 프로그램이 서로 통신하기 위해 사용
+	- TCP : 컴퓨터에 실행 중인 여러 프로그램 중 통신 대상을 찾을 때 사용
+	- IPv4 : 인터넷에 연결된 수많은 컴퓨터 가운데 특정 컴퓨터를 찾을 때 사용
+	- Ethernet : 같은 LAN에 있는 다른 컴퓨터를 찾을 때 사용
+
+- 캡슐화 : 보내는 쪽에서 데이터에 프로토콜들을 조합하여 패킷을 만드는 과정
+- 역캡슐화 : 받는 쪽에서 패킷의 낮은 계층부터 높은 계층의 헤더를 하나씩 확인하는 과정

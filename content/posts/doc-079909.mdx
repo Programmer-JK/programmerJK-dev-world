@@ -1,0 +1,150 @@
+---
+title: "Options API vs Composition API"
+date: 2025-02-12
+island: library
+room: frontend
+tags: []
+---
+Vue.js는 컴포넌트 기반 프레임워크로서 개발자들에게 다양한 API 스타일을 제공합니다. 이번 글에서는 Vue.js의 두 가지 주요 API 스타일인 Options API와 Composition API의 생명주기 훅 사용법과 각각의 장단점을 자세히 알아보겠습니다.
+
+## Vue.js의 두 가지 API 스타일
+
+### Options API 소개
+Options API는 Vue 2.x 버전부터 사용되어 온 전통적인 방식입니다. 컴포넌트의 로직을 `data`, `methods`, `computed` 등 여러 옵션 객체로 구분하여 정의하는 방식으로, 많은 Vue 개발자들에게 친숙한 접근 방식입니다.
+
+### Composition API 소개
+Composition API는 Vue 3에서 새롭게 도입된 방식으로, 함수형 프로그래밍의 장점을 활용합니다. `setup` 함수를 통해 컴포넌트의 로직을 정의하며, 보다 유연한 코드 구성이 가능합니다.
+
+## 생명주기 훅 구현 비교
+
+### Options API의 생명주기 훅 구현
+
+Options API에서는 생명주기 훅을 컴포넌트 옵션으로 직접 정의합니다:
+
+```vue
+<template>
+  <div>
+    <p>Options API 생명주기 훅 예제</p>
+  </div>
+</template>
+
+<script>
+export default {
+  beforeCreate() {
+    console.log('beforeCreate');
+  },
+  created() {
+    console.log('created');
+  },
+  beforeMount() {
+    console.log('beforeMount');
+  },
+  mounted() {
+    console.log('mounted');
+  },
+  beforeUpdate() {
+    console.log('beforeUpdate');
+  },
+  updated() {
+    console.log('updated');
+  },
+  beforeUnmount() {
+    console.log('beforeUnmount');
+  },
+  unmounted() {
+    console.log('unmounted');
+  }
+};
+</script>
+```
+
+### Composition API의 생명주기 훅 구현
+
+Composition API에서는 생명주기 훅을 `setup` 함수 내에서 호출합니다:
+
+```vue
+<template>
+  <div>
+    <p>Composition API 생명주기 훅 예제</p>
+  </div>
+</template>
+
+<script>
+import { onBeforeMount, onMounted, onBeforeUpdate, onUpdated, onBeforeUnmount, onUnmounted } from 'vue';
+
+export default {
+  setup() {
+    onBeforeMount(() => {
+      console.log('beforeMount');
+    });
+
+    onMounted(() => {
+      console.log('mounted');
+    });
+
+    onBeforeUpdate(() => {
+      console.log('beforeUpdate');
+    });
+
+    onUpdated(() => {
+      console.log('updated');
+    });
+
+    onBeforeUnmount(() => {
+      console.log('beforeUnmount');
+    });
+
+    onUnmounted(() => {
+      console.log('unmounted');
+    });
+  }
+};
+</script>
+```
+
+## 두 API 스타일의 장단점 분석
+
+### Options API
+
+장점:
+- 직관적인 코드 구조로 초보자가 이해하기 쉽습니다
+- Vue 2.x 버전과의 호환성이 뛰어납니다
+- 컴포넌트의 각 부분이 명확하게 구분되어 있어 코드 탐색이 용이합니다
+
+단점:
+- 컴포넌트가 복잡해질수록 코드 재사용이 어려워집니다
+- 관련 있는 로직이 여러 옵션에 분산될 수 있해습니다
+- 타입스크립트 지원이 Composition API에 비제한적입니다
+
+### Composition API
+
+장점:
+- 로직의 재사용성이 높습니다
+- 관련 있는 코드를 함께 구성할 수 있어 유지보수가 용이합니다
+- 타입스크립트와의 통합이 자연스럽습니다
+- 대규모 애플리케이션에서 코드 구성이 더 효율적입니다
+
+단점:
+- 새로운 개념을 학습해야 하는 초기 진입 장벽이 있습니다
+- 간단한 컴포넌트에서는 오히려 복잡해 보일 수 있습니다
+- 기존 Vue 개발자들에게는 적응 기간이 필요할 수 있습니다
+
+## 어떤 API를 선택해야 할까?
+
+프로젝트의 특성과 팀의 상황에 따라 적절한 API를 선택하는 것이 중요합니다:
+
+### Options API가 적합한 경우
+- 소규모 또는 중규모 프로젝트
+- Vue를 처음 배우는 개발자가 많은 팀
+- Vue 2.x에서 마이그레이션하는 프로젝트
+- 간단한 컴포넌트 위주의 애플리케이션
+
+### Composition API가 적합한 경우
+- 대규모 프로젝트
+- 복잡한 로직을 다루는 컴포넌트가 많은 경우
+- 타입스크립트를 적극적으로 활용하는 프로젝트
+- 코드 재사용성이 중요한 프로젝트
+
+## 결론
+
+Vue.js는 Options API와 Composition API를 통해 개발자들에게 유연한 선택지를 제공합니다. 두 API 모두 각자의 장단점이 있으며, 프로젝트의 요구사항과 팀의 상황에 맞게 선택하면 됩니다. 특히 생명주기 훅의 관점에서 볼 때, Options API는 직관적인 구조를, Composition API는 더 유연한 로직 구성을 제공합니다.

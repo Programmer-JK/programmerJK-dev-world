@@ -1,0 +1,103 @@
+---
+title: "CSS object-fit"
+date: 2025-01-12
+island: library
+room: frontend
+tags: []
+---
+`object-fit` 속성은 이미지나 비디오가 지정된 컨테이너에 어떻게 맞춰질지를 결정하는 CSS 속성입니다. 각각의 값이 어떤 특징을 가지고 있는지 실제 사용 예시와 함께 자세히 알아보겠습니다.
+
+
+
+## 각 값의 상세 설명
+
+### 1. object-fit: cover
+- **특징**: 컨테이너를 가득 채우도록 이미지 크기 조정
+- **종횡비**: 유지됨
+- **잘림**: 필요한 경우 발생
+- **사용 케이스**: 
+  - 프로필 이미지
+  - 히어로 이미지
+  - 썸네일
+```html
+<div class="w-[200px] h-[200px]">
+  <img src="profile.jpg" class="w-full h-full object-cover" alt="Profile" />
+</div>
+```
+
+### 2. object-fit: contain
+- **특징**: 이미지 전체가 보이도록 조정
+- **종횡비**: 유지됨
+- **빈 공간**: 컨테이너와 이미지 비율이 다른 경우 발생
+- **사용 케이스**:
+  - 로고
+  - 제품 이미지
+  - 아이콘
+```html
+<div class="w-[300px] h-[200px]">
+  <img src="logo.png" class="w-full h-full object-contain" alt="Logo" />
+</div>
+```
+
+### 3. object-fit: fill
+- **특징**: 컨테이너를 강제로 채움
+- **종횡비**: 무시됨
+- **왜곡**: 항상 발생 가능
+- **사용 케이스**:
+  - 배경 패턴
+  - 특수 효과가 필요한 경우
+```html
+<div class="w-[300px] h-[150px]">
+  <img src="pattern.jpg" class="w-full h-full object-fill" alt="Pattern" />
+</div>
+```
+
+### 4. object-fit: none
+- **특징**: 원본 크기 그대로 표시
+- **종횡비**: 유지됨
+- **잘림/스크롤**: 컨테이너보다 큰 경우 발생
+- **사용 케이스**:
+  - 정확한 크기의 이미지
+  - 고해상도 이미지 상세보기
+```html
+<div class="w-[400px] h-[300px] overflow-auto">
+  <img src="detail.jpg" class="object-none" alt="Detail" />
+</div>
+```
+
+### 5. object-fit: scale-down
+- **특징**: contain과 none 중 더 작은 크기 선택
+- **종횡비**: 유지됨
+- **크기**: 원본보다 커지지 않음
+- **사용 케이스**:
+  - 다양한 크기의 이미지 갤러리
+  - 반응형 이미지
+```html
+<div class="w-[250px] h-[250px]">
+  <img src="gallery.jpg" class="w-full h-full object-scale-down" alt="Gallery" />
+</div>
+```
+
+## 선택 가이드
+
+1. **cover 선택 시**:
+   - 이미지가 컨테이너를 완전히 채워야 할 때
+   - 일부 이미지 잘림이 허용될 때
+
+2. **contain 선택 시**:
+   - 이미지 전체가 반드시 보여야 할 때
+   - 빈 공간이 허용될 때
+
+3. **fill 선택 시**:
+   - 이미지 왜곡이 문제되지 않을 때
+   - 컨테이너를 반드시 채워야 할 때
+
+4. **none 선택 시**:
+   - 원본 크기 유지가 중요할 때
+   - 이미지 크기 조정이 불필요할 때
+
+5. **scale-down 선택 시**:
+   - 이미지가 원본 크기보다 커지는 것을 방지해야 할 때
+   - 다양한 크기의 이미지를 일관되게 표시해야 할 때
+
+각 속성은 서로 다른 용도에 최적화되어 있으므로, 상황에 맞는 적절한 선택이 중요합니다.

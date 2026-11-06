@@ -1,0 +1,169 @@
+---
+title: "JavaScript FormData 객체를 중첩 객체로 변환하기 - 기초"
+date: 2025-03-10
+island: library
+room: frontend
+tags: []
+---
+웹 개발을 하다 보면 HTML 폼 데이터를 JavaScript 객체로 변환해야 하는 경우가 자주 있습니다. 특히 복잡한 폼에서는 중첩된 객체 구조가 필요한 경우도 많습니다. 오늘은 FormData 객체를 어떻게 중첩 구조의 JavaScript 객체로 변환하는지 살펴보겠습니다.
+
+## 기본 코드 분석
+
+아래 코드는 FormData 객체를 JavaScript 객체로 변환하는 함수입니다:
+
+```typescript
+formDataToOption(formData: FormData): Record<string, any> {
+    const object: Record<string, any> = {};
+    let entries = formData.entries();
+
+    for (const pair of entries) {
+      if (pair[1] === 'on') {
+        const checkbox = this.setting.contentEl.querySelector(`[name="${pair[0]}"]`) as HTMLInputElement;
+        if (checkbox && checkbox.type === 'checkbox') {
+          pair[1] = checkbox.checked ? "true" : "false";
+        }
+      }
+      if (pair[0].includes('.')) {
+        const parts = pair[0].split('.');
+        let current = object;
+        
+        for (let i = 0; i < parts.length - 1; i++) {
+          const part = parts[i];
+          if (!current[part]) {
+            current[part] = {};
+          }
+          current = current[part];
+        }
+        current[parts[parts.length - 1]] = pair[1];
+      } else {
+        object[pair[0]] = pair[1];
+      }
+    }
+
+    return object;
+}
+```
+
+이 함수는 크게 세 가지 주요 기능을 수행합니다:
+
+1. FormData의 각 항목을 순회합니다.
+2. 체크박스 요소를 특별히 처리합니다.
+3. 점(.)을 포함하는 키를 중첩 객체 구조로 변환합니다.
+
+## `const`와 객체 변경
+
+JavaScript에서 `const`로 선언된 변수는 재할당이 불가능하지만, 객체의 내용은 변경할 수 있습니다.
+
+```javascript
+const object = {};  // 이 변수는 다른 객체로 재할당 불가
+object.name = "John";  // 하지만 객체의 속성은 변경 가능
+```
+
+이 코드에서 `object` 변수는 `const`로 선언되어 있어 재할당은 불가능하지만, 내부 속성을 추가하고 수정하는 것은 가능합니다.
+
+## 중첩 객체 구조 다루기: `current` 변수의 역할
+
+이 함수에서 가장 흥미로운 부분은 점(.)을 포함하는 키를 처리하는 코드입니다:
+
+```javascript
+if (pair[0].includes('.')) {
+  const parts = pair[0].split('.');
+  let current = object;
+  
+  for (let i = 0; i < parts.length - 1; i++) {
+    const part = parts[i];
+    if (!current[part]) {
+      current[part] = {};
+    }
+    current = current[part];
+  }
+  current[parts[parts.length - 1]] = pair[1];
+}
+```
+
+여기서 `current` 변수는 중첩 객체 구조를 따라가는 참조 변수입니다. 처음에는 최상위 객체를 가리키고, 점으로 구분된 각 부분을 따라 내려가면서 참조가 변경됩니다.
+
+### 예시로 이해하기
+
+폼에서 `user.address.city = "서울"` 이라는 데이터가 있다고 가정해 봅시다:
+
+1. `parts = ["user", "address", "city"]`로 분리
+2. 처음에 `current = object` (최상위 객체 참조)
+3. 첫 번째 반복: `current`가 `object.user`를 가리키게 변경 (필요하면 생성)
+4. 두 번째 반복: `current`가 `object.user.address`를 가리키게 변경 (필요하면 생성)
+5. 반복이 끝난 후: `current.city = "서울"` 실행 (즉, `object.user.address.city = "서울"`)
+
+이렇게 하면 최종 결과는 다음과 같은 중첩 객체가 됩니다:
+
+```javascript
+{
+  user: {
+    address: {
+      city: "서울"
+    }
+  }
+}
+```
+
+## 체크박스 처리
+
+또 다른 중요한 기능은 체크박스 요소의 처리입니다:
+
+```javascript
+if (pair[1] === 'on') {
+  const checkbox = this.setting.contentEl.querySelector(`[name="${pair[0]}"]`) as HTMLInputElement;
+  if (checkbox && checkbox.type === 'checkbox') {
+    pair[1] = checkbox.checked ? "true" : "false";
+  }
+}
+```
+
+체크박스가 제출될 때 기본값은 단순히 'on'이지만, 이 코드는 실제 체크박스의 체크 상태를 확인하여 'true' 또는 'false' 문자열로 변환합니다.
+
+## 실제 사용 예시
+
+이 함수를 사용하여 다양한 형태의 폼 데이터를 변환할 수 있습니다:
+
+### 기본 폼 필드
+
+```html
+<input name="username" value="john" />
+```
+
+결과: `{ username: "john" }`
+
+### 중첩 객체
+
+```html
+<input name="user.profile.firstName" value="John" />
+<input name="user.profile.lastName" value="Doe" />
+<input name="user.email" value="john@example.com" />
+```
+
+결과:
+
+```javascript
+{
+  user: {
+    profile: {
+      firstName: "John",
+      lastName: "Doe"
+    },
+    email: "john@example.com"
+  }
+}
+```
+
+### 체크박스 처리
+
+```html
+<input type="checkbox" name="newsletter" checked />
+```
+
+결과: `{ newsletter: "true" }`
+
+## 결론
+
+이 함수는 HTML 폼 데이터를 JavaScript 객체로 변환하는 강력한 도구입니다. 특히 점 표기법을 사용한 중첩 객체 구조 처리와 체크박스 요소의 특별 처리가 매우 유용합니다. 이 패턴을 활용하면 복잡한 폼 데이터도 쉽게 처리할 수 있습니다.
+
+이러한 접근 방식은 특히 React, Vue, Angular 같은 프레임워크에서 폼 데이터를 상태로 관리할 때 유용하게 활용할 수 있습니다.

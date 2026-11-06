@@ -1,0 +1,151 @@
+---
+title: "HTML5 드래그 앤 드롭 구현"
+date: 2025-02-07
+island: library
+room: frontend
+tags: []
+---
+## 소개
+칸반보드의 핵심 기능인 드래그 앤 드롭을 HTML5의 Drag and Drop API를 사용하여 구현하는 과정을 소개합니다.
+
+## 1. 드래그 가능한 카드 컴포넌트 구현
+
+카드 컴포넌트에서는 draggable 속성과 dragstart 이벤트를 사용합니다.
+
+```javascript
+const Card = ({ column }: CardProps) => {
+  const handleDragStart = (e: React.DragEvent) => {
+    // 드래그 시작할 때 필요한 데이터 저장
+    e.dataTransfer.setData("columnId", column.id);
+    e.dataTransfer.setData("fromState", column.state);
+  };
+
+  return (
+    <div
+      className="card flex flex-col items-end w-full my-3 p-2 
+                 bg-white rounded-md shadow-md shadow-black/40"
+      draggable
+      onDragStart={handleDragStart}
+    >
+      {/* 카드 내용 */}
+    </div>
+  );
+};
+```
+
+### 1.1 드래그 데이터 전달
+- dataTransfer 객체를 사용하여 드래그 중인 카드의 정보를 저장
+- columnId: 카드의 고유 식별자
+- fromState: 카드의 현재 상태(todo, ongoing, completed 등)
+
+## 2. 드롭 영역(컬럼) 구현
+
+각 상태 컬럼(Todo, Ongoing, Completed)은 드롭 가능한 영역으로 구현됩니다.
+
+```javascript
+const OngoingList = () => {
+  const curState: StateType = "ongoing";
+  const { projectBoard, moveCard } = useKanStore();
+
+  const dragOverHandler = (e: React.DragEvent) => {
+    e.preventDefault(); // 드롭을 허용하기 위해 필수
+  };
+
+  const dropHandler = (e: React.DragEvent) => {
+    e.preventDefault();
+    
+    // 드래그 중인 카드 정보 가져오기
+    const columnId = e.dataTransfer.getData("columnId");
+    const fromState = e.dataTransfer.getData("fromState") as StateType;
+
+    // 드롭 위치 계산
+    const container = e.currentTarget as HTMLElement;
+    const cards = container.querySelectorAll(".card");
+    const dropY = e.clientY;
+
+    let dropIndex = projectBoard.columns[curState].length;
+
+    // 마우스 위치를 기준으로 드롭할 인덱스 계산
+    for (let i = 0; i < cards.length; i++) {
+      const card = cards[i];
+      const rect = card.getBoundingClientRect();
+      const cardMiddle = rect.top + rect.height / 2;
+
+      if (dropY < cardMiddle) {
+        dropIndex = i;
+        break;
+      }
+    }
+
+    // 카드 이동 실행
+    moveCard(fromState, curState, columnId, dropIndex);
+  };
+
+  return (
+    <div
+      className="col-span-1 bg-blue-300 p-2"
+      onDragOver={dragOverHandler}
+      onDrop={dropHandler}
+    >
+      {/* 컬럼 내용 */}
+    </div>
+  );
+};
+```
+
+## 3. 주요 구현 포인트 설명
+
+### 3.1 드래그 시작 (dragstart)
+- draggable 속성을 true로 설정하여 요소를 드래그 가능하게 만듦
+- dataTransfer 객체에 필요한 데이터 저장
+- 카드의 ID와 현재 상태를 저장하여 이동 시 사용
+
+### 3.2 드래그 오버 (dragover)
+- preventDefault()를 호출하여 드롭을 허용
+- 이 처리가 없으면 드롭 이벤트가 발생하지 않음
+
+### 3.3 드롭 처리 (drop)
+1. 드롭 위치 계산
+   - 현재 마우스의 Y 좌표(e.clientY)를 기준
+   - 각 카드의 위치와 비교하여 삽입할 위치 결정
+   - getBoundingClientRect()로 카드의 위치 정보 획득
+
+2. 카드 이동 실행
+   - 시작 상태(fromState)와 목표 상태(curState) 확인
+   - 계산된 인덱스(dropIndex)에 카드 삽입
+
+## 4. 상태 관리
+이 프로젝트에서는 Zustand를 사용하여 상태를 관리합니다.
+
+```javascript
+const useKanStore = create((set) => ({
+  projectBoard: {
+    columns: {
+      todo: [],
+      ongoing: [],
+      completed: []
+    }
+  },
+  moveCard: (fromState, toState, columnId, dropIndex) => 
+    set((state) => {
+      // 카드 이동 로직
+    })
+}));
+```
+
+## 5. 알아두면 좋은 점
+
+1. **이벤트 핸들링**
+   - dragstart, dragover, drop 이벤트의 preventDefault() 호출이 중요
+   - 특히 dragover 이벤트의 preventDefault()가 없으면 드롭이 동작하지 않음
+
+2. **드롭 위치 계산**
+   - 마우스 Y 좌표와 카드들의 위치를 비교하여 정확한 삽입 위치 계산
+   - 카드의 중간 지점을 기준으로 위/아래 결정
+
+3. **타입 안정성**
+   - React.DragEvent 타입을 사용하여 타입 안정성 확보
+   - as 키워드로 필요한 경우 타입 캐스팅
+
+## 결론
+HTML5의 Drag and Drop API를 사용하면 비교적 간단하게 드래그 앤 드롭 기능을 구현할 수 있습니다. 중요한 점은 적절한 이벤트 처리와 정확한 드롭 위치 계산입니다. 이를 통해 사용자에게 직관적이고 자연스러운 UI/UX를 제공할 수 있습니다.

@@ -1,0 +1,135 @@
+---
+title: "Next.js 레이아웃의 기본 개념"
+date: 2025-01-08
+island: library
+room: frontend
+tags: []
+---
+### Next.js 레이아웃의 기본 개념
+
+Next.js의 레이아웃 시스템은 웹 애플리케이션의 공통된 UI 요소를 효율적으로 관리할 수 있게 해줍니다. RootLayout은 모든 페이지에서 공유되는 가장 기본적인 레이아웃 구조를 정의합니다.
+
+```typescript
+// app/layout.tsx
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body>
+        {children} // 여기에 페이지 컴포넌트들이 렌더링됩니다
+      </body>
+    </html>
+  );
+}
+```
+
+### 페이지 컴포넌트와 children의 관계
+
+Next.js에서 페이지는 app 디렉토리 내의 page.tsx 파일들로 정의됩니다. 이러한 페이지 컴포넌트들은 자동으로 레이아웃의 children으로 전달됩니다. 예를 들어:
+
+```typescript
+// app/page.tsx (홈 페이지)
+export default function HomePage() {
+  return (
+    <main>
+      <h1>홈페이지입니다</h1>
+    </main>
+  );
+}
+
+// app/about/page.tsx (about 페이지)
+export default function AboutPage() {
+  return (
+    <main>
+      <h1>소개 페이지입니다</h1>
+    </main>
+  );
+}
+```
+
+### 레이아웃 중첩 구조
+
+Next.js는 폴더 구조에 따라 레이아웃을 중첩할 수 있습니다. 각 폴더에 layout.tsx 파일을 생성하면 해당 경로와 그 하위 경로에 대한 레이아웃을 정의할 수 있습니다.
+
+```typescript
+// app/dashboard/layout.tsx
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="dashboard-container">
+      <nav>대시보드 메뉴</nav>
+      <main>{children}</main>
+    </div>
+  );
+}
+```
+
+실제 렌더링 과정은 다음과 같은 중첩 구조로 이루어집니다:
+
+```typescript
+<RootLayout>              // app/layout.tsx
+  <DashboardLayout>       // app/dashboard/layout.tsx
+    <DashboardPage />     // app/dashboard/page.tsx (children으로 전달됨)
+  </DashboardLayout>
+</RootLayout>
+```
+
+### Template vs Layout
+
+레이아웃과 비슷하지만 약간 다른 개념으로 템플릿이 있습니다. template.tsx 파일을 사용하면 각 페이지 전환마다 새로운 인스턴스가 생성됩니다:
+
+```typescript
+// app/template.tsx
+export default function Template({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="page-transition-wrapper">
+      {children}
+    </div>
+  );
+}
+```
+
+### 특별한 케이스: 병렬 라우트
+
+더 복잡한 레이아웃이 필요한 경우, Next.js는 병렬 라우트를 지원합니다:
+
+```typescript
+// app/layout.tsx
+export default function RootLayout({
+  children,
+  auth,
+}: {
+  children: React.ReactNode;
+  auth: React.ReactNode;
+}) {
+  return (
+    <html>
+      <body>
+        {auth}  // @auth 디렉토리의 컴포넌트
+        {children}  // 기본 페이지 컴포넌트
+      </body>
+    </html>
+  );
+}
+```
+
+### 정리
+
+Next.js의 children 시스템은 다음과 같은 특징을 가집니다:
+
+1. 자동 주입: page.tsx 컴포넌트들이 자동으로 상위 layout.tsx의 children으로 전달됩니다.
+2. 계층 구조: 폴더 구조를 통해 자연스러운 레이아웃 중첩이 가능합니다.
+3. 유연성: layout.tsx, template.tsx, 병렬 라우트 등 다양한 레이아웃 패턴을 지원합니다.
+4. 성능 최적화: 레이아웃은 한 번만 렌더링되고 재사용되어 효율적입니다.
+
+이러한 시스템을 통해 복잡한 웹 애플리케이션의 UI 구조를 체계적으로 관리할 수 있습니다.

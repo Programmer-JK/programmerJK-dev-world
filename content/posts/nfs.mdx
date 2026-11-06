@@ -1,0 +1,65 @@
+---
+title: "NFS(Network File System)"
+summary: "Ubuntu와 CentOS 환경에서의 NFS 서버 및 클라이언트 설정 방법"
+date: 2024-12-03
+island: library
+room: devops
+tags: ["nfs", "network-storage", "server-configuration", "file-sharing", "linux-administration", "storage-management"]
+---
+## 1. NFS(Network File System) 설정
+
+### Ubuntu 서버 설정
+
+```bash
+# NFS 서버 설치 및 설정
+sudo apt update
+sudo apt install nfs-kernel-server
+
+# 공유 폴더 설정
+sudo mkdir -p /var/www
+sudo chown nobody:nogroup /var/www
+sudo chmod 777 /var/www
+
+# 설정 파일 수정
+echo "/var/www    클라이언트IP(rw,sync,no_subtree_check)" | sudo tee -a /etc/exports
+sudo exportfs -a
+sudo systemctl restart nfs-kernel-server
+```
+
+### CentOS 클라이언트 설정
+
+```bash
+# NFS 클라이언트 설치
+sudo yum install nfs-utils
+sudo systemctl start nfs
+sudo systemctl enable nfs
+
+# 마운트 설정
+sudo mkdir -p /var/www
+sudo mount 서버IP:/var/www /var/www
+
+# 영구 마운트
+echo "서버IP:/var/www    /var/www    nfs    defaults    0 0" | sudo tee -a /etc/fstab
+```
+
+### Ubuntu 클라이언트 설정
+
+```bash
+# 1. NFS 클라이언트 설치
+sudo apt update
+sudo apt install nfs-common
+
+# 2. 마운트할 디렉토리 생성
+sudo mkdir -p /var/www
+
+# 3. NFS 마운트
+sudo mount 서버IP:/var/www /var/www
+
+# 4. 영구 마운트 설정
+sudo vi /etc/fstab
+# 아래 내용 추가
+서버IP:/var/www    /var/www    nfs    defaults    0    0
+
+# 5. 마운트 확인
+df -h
+```

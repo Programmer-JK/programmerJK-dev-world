@@ -1,0 +1,544 @@
+---
+title: "ML/LLM 모델 운영 및 학습 실무 가이드"
+date: 2026-01-08
+island: library
+room: ai
+tags: ["MLOps", "Fine-tuning", "LLM"]
+---
+---
+
+## 1. 핵심 프레임워크
+
+모델 성능 개선은 두 단계로 접근한다.
+
+|모델 유형|학습 이전 (운영)|학습 (파라미터 변경)|
+|---|---|---|
+|**vLLM / sLLM**|Prompt / Context|Fine-tuning|
+|**Embedding**|Score / Search 파라미터|Triplet / Contrastive Loss|
+|**Cross-encoder**|Top-N / Threshold|Margin Ranking Loss|
+
+**원칙**: 운영 단계 조정을 먼저 시도하고, 해결되지 않을 때만 학습을 검토한다.
+
+### 의사결정 플로우
+
+```
+성능 저하 감지
+      │
+      ▼
+  원인 분석
+      │
+      ├─────────────────┬─────────────────┐
+      ▼                 ▼                 ▼
+  시스템 문제       데이터 문제        모델 문제
+      │                 │                 │
+      ▼                 ▼                 ▼
+  인프라 점검      데이터 정제      운영 파라미터 조정
+                                          │
+                                   해결됨? │
+                                   ┌──────┴──────┐
+                                   ▼             ▼
+                                  Yes           No
+                                   │             │
+                                   ▼             ▼
+                                 완료         재학습 진행
+                                                 │
+                                                 ▼
+                                            A/B 테스트
+                                                 │
+                                                 ▼
+                                               배포
+```
+
+---
+
+## 2. 학습 전에 할 수 있는 것들
+
+모델 재학습 없이 조정할 수 있는 항목들이다.
+
+### vLLM / sLLM
+
+|조정 항목|방법|적용 상황|
+|---|---|---|
+|시스템 프롬프트|역할, 규칙, 응답 형식 명시|답변 형식 불일관|
+|Few-shot 예시|2-3개 질문-답변 예시 제공|특정 유형 답변 실패|
+|Context 최적화|관련성 높은 문서만 포함, 순서 조정|비용 절감, 누락 방지|
+
+### Embedding
+
+|조정 항목|방법|적용 상황|
+|---|---|---|
+|score_threshold|최소 유사도 점수 조정|무관한 문서가 많거나 결과가 적을 때|
+|top_k|반환 문서 수 조정|관련 문서 누락 또는 노이즈 과다|
+
+### Cross-encoder
+
+Cross-encoder는 두 가지 용도로 사용한다.
+
+|용도|설명|
+|---|---|
+|Reranking|검색된 문서들의 순위를 재조정|
+|Cache 확인|새 질문이 기존 질문과 의미적으로 같은지 판단하여 캐시 재사용|
+
+|조정 항목|방법|적용 상황|
+|---|---|---|
+|top_n|최종 반환 문서 수 (Reranking)|결과가 너무 많거나 적을 때|
+|threshold|최소 유사도 점수|Reranking 정확도 조정, Cache 판정 기준|
+
+---
+
+## 3. 학습이 필요한 시점
+
+운영 조정으로 해결이 안 될 때 학습을 검토한다.
+
+### 모델별 학습 트리거
+
+|모델|학습 필요 상황|학습 방식|
+|---|---|---|
+|vLLM/sLLM|프롬프트 비용 급증, 도메인 용어 지속 오류|Fine-tuning (LoRA)|
+|Embedding|Recall@20 < 0.80 지속, 도메인 용어 이해 실패|Triplet Loss|
+|Cross-encoder|NDCG@5 < 0.60 지속, 순위 지속 오류, Cache 판정 오류|Margin Ranking Loss|
+
+---
+
+### vLLM / sLLM: Fine-tuning
+
+전체 파라미터를 학습하면 비용이 크기 때문에, 일부 파라미터만 학습하는 **LoRA** 방식을 주로 사용한다.
+
+|방식|특징|
+|---|---|
+|Full Fine-tuning|전체 파라미터 학습. 대규모 데이터와 GPU 필요|
+|LoRA|전체의 약 0.1%만 학습. 비용과 시간 절감|
+|QLoRA|LoRA + 양자화. GPU 메모리 제한 시 사용|
+
+**학습 데이터 형식**: 시스템 프롬프트, 사용자 질문, 정답 응답을 쌍으로 구성한다.
+
+→ 코드 예시: 부록 A.1 참고
+
+---
+
+### Embedding: Triplet / Contrastive Loss
+
+질문과 정답 문서는 가깝게, 오답 문서는 멀게 학습한다.
+
+|Loss|데이터 형식|특징|
+|---|---|---|
+|TripletLoss|(질문, 정답문서, 오답문서)|정답/오답을 직접 지정|
+|MultipleNegativesRankingLoss|(질문, 정답문서)|배치 내 다른 문서가 자동으로 오답이 됨|
+|ContrastiveLoss|(문서1, 문서2, 유사도점수)|유사도를 0~1로 직접 지정|
+
+**실무 권장**: 데이터가 적을 때 **MultipleNegativesRankingLoss**로 시작하고, 성능이 부족하면 **TripletLoss**로 전환한다.
+
+**Hard Negative**: 완전히 다른 주제가 아니라, 비슷해 보이지만 실제로는 다른 문서를 오답으로 선택해야 효과적이다.
+
+→ 코드 예시: 부록 A.2 참고
+
+---
+
+### Cross-encoder: Margin Ranking Loss
+
+정답 문서의 점수가 오답 문서보다 일정 간격(margin) 이상 높도록 학습한다.
+
+|요소|설명|
+|---|---|
+|margin|두 점수 간 최소 차이 (보통 0.5~1.0)|
+|목표|score(정답) > score(오답) + margin|
+
+**학습 데이터 형식**: 질문, 정답 문서, 오답 문서를 쌍으로 구성한다.
+
+→ 코드 예시: 부록 A.3 참고
+
+---
+
+## 부록 A: 학습 코드 예시
+
+### A.1 Fine-tuning (LoRA) - Llama 2 기준
+
+```python
+import torch
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    TrainingArguments,
+    Trainer,
+    DataCollatorForLanguageModeling,
+)
+from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training
+from datasets import Dataset
+
+# === 1. 학습 데이터 준비 ===
+raw_data = [
+    {
+        "instruction": "적금 이율이 어떻게 되나요?",
+        "output": "현재 정기적금 금리는 연 3.5%입니다. 가입 기간과 금액에 따라 우대금리가 적용될 수 있습니다."
+    },
+    {
+        "instruction": "대출 한도는 어떻게 되나요?",
+        "output": "대출 한도는 신용등급과 소득에 따라 다릅니다. 정확한 한도는 심사 후 안내드리겠습니다."
+    },
+]
+
+def formatting_func(example):
+    return f"### 질문: {example['instruction']}\n### 답변: {example['output']}"
+
+# === 2. 모델 및 토크나이저 로드 ===
+model_name = "meta-llama/Llama-2-7b-hf"
+
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+tokenizer.pad_token = tokenizer.eos_token
+
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    torch_dtype=torch.float16,
+    device_map="auto",
+)
+
+# === 3. LoRA 설정 및 적용 ===
+lora_config = LoraConfig(
+    task_type=TaskType.CAUSAL_LM,
+    r=16,
+    lora_alpha=32,
+    lora_dropout=0.1,
+    target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+)
+
+model = get_peft_model(model, lora_config)
+model.print_trainable_parameters()
+
+# === 4. 데이터셋 토크나이즈 ===
+def tokenize(example):
+    text = formatting_func(example)
+    tokens = tokenizer(text, truncation=True, max_length=512, padding="max_length")
+    tokens["labels"] = tokens["input_ids"].copy()
+    return tokens
+
+dataset = Dataset.from_list(raw_data)
+tokenized_dataset = dataset.map(tokenize, remove_columns=dataset.column_names)
+
+# === 5. 학습 ===
+training_args = TrainingArguments(
+    output_dir="./lora_output",
+    num_train_epochs=3,
+    per_device_train_batch_size=4,
+    gradient_accumulation_steps=4,
+    learning_rate=2e-4,
+    fp16=True,
+    logging_steps=10,
+    save_strategy="epoch",
+)
+
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=tokenized_dataset,
+    data_collator=DataCollatorForLanguageModeling(tokenizer, mlm=False),
+)
+
+trainer.train()
+
+# === 6. 저장 ===
+model.save_pretrained("./lora_output")
+tokenizer.save_pretrained("./lora_output")
+```
+
+---
+
+### A.2 Embedding: Triplet Loss
+
+```python
+from sentence_transformers import SentenceTransformer, losses, InputExample, evaluation
+from torch.utils.data import DataLoader
+
+# === 1. 학습 데이터 준비 ===
+# anchor: 질문, positive: 관련 문서, negative: 무관 문서
+triplet_data = [
+    {
+        "anchor": "연차 휴가 신청 방법",
+        "positive": "휴가 신청서는 HR 시스템에서 최소 3일 전에 작성하여 제출합니다.",
+        "negative": "퇴직금은 근속연수에 따라 계산됩니다."
+    },
+    {
+        "anchor": "비밀번호 변경하는 법",
+        "positive": "설정 메뉴에서 보안 탭을 선택한 후 비밀번호 변경을 클릭합니다.",
+        "negative": "신규 계정은 관리자 승인 후 생성됩니다."
+    },
+    {
+        "anchor": "회의실 예약 방법",
+        "positive": "사내 포털에서 회의실 예약 메뉴를 통해 예약할 수 있습니다.",
+        "negative": "출장비 정산은 경비 시스템에서 진행합니다."
+    },
+]
+
+# === 2. 모델 로드 ===
+model = SentenceTransformer("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
+
+# === 3. 학습 데이터 변환 ===
+train_examples = [
+    InputExample(texts=[item["anchor"], item["positive"], item["negative"]])
+    for item in triplet_data
+]
+
+train_dataloader = DataLoader(train_examples, shuffle=True, batch_size=16)
+
+# === 4. Loss 설정 ===
+train_loss = losses.TripletLoss(
+    model=model,
+    triplet_margin=0.5,
+)
+
+# === 5. 평가 데이터 (선택) ===
+eval_sentences1 = ["연차 신청 방법", "비밀번호 바꾸는 법"]
+eval_sentences2 = ["휴가 신청서 작성 방법", "비밀번호 변경 절차"]
+eval_scores = [1.0, 1.0]  # 유사도 점수
+
+evaluator = evaluation.EmbeddingSimilarityEvaluator(
+    eval_sentences1, eval_sentences2, eval_scores
+)
+
+# === 6. 학습 ===
+model.fit(
+    train_objectives=[(train_dataloader, train_loss)],
+    epochs=3,
+    warmup_steps=100,
+    evaluator=evaluator,
+    evaluation_steps=500,
+    output_path="./finetuned_embedding",
+)
+
+# === 7. 학습된 모델 사용 ===
+model = SentenceTransformer("./finetuned_embedding")
+embeddings = model.encode(["연차 휴가 신청 방법"])
+```
+
+---
+
+### A.3 Cross-encoder: Reranker 학습
+
+```python
+from sentence_transformers import CrossEncoder, InputExample
+from sentence_transformers.cross_encoder.evaluation import CECorrelationEval                  uator
+from torch.utils.data import DataLoader
+
+# === 1. 학습 데이터 준비 ===
+# (query, document, relevance_score)
+training_data = [
+    {"query": "연차 휴가 신청 방법", "document": "휴가 신청서는 HR 시스템에서 제출합니다.", "score": 1.0},
+    {"query": "연차 휴가 신청 방법", "document": "퇴직금 계산 방법을 안내합니다.", "score": 0.0},
+    {"query": "비밀번호 변경", "document": "설정에서 보안 탭을 선택하세요.", "score": 1.0},
+    {"query": "비밀번호 변경", "document": "회의실 예약은 포털에서 가능합니다.", "score": 0.0},
+    {"query": "출장비 정산", "document": "출장비는 경비 시스템에서 정산합니다.", "score": 1.0},
+    {"query": "출장비 정산", "document": "연차는 1년 근속 시 15일 부여됩니다.", "score": 0.0},
+]
+
+# === 2. 모델 로드 ===
+model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2", num_labels=1)
+
+# === 3. 학습 데이터 변환 ===
+train_samples = [
+    InputExample(texts=[item["query"], item["document"]], label=item["score"])
+    for item in training_data
+]
+
+train_dataloader = DataLoader(train_samples, shuffle=True, batch_size=16)
+
+# === 4. 평가 데이터 (선택) ===
+eval_sentences1 = ["연차 신청", "비밀번호 변경"]
+eval_sentences2 = ["휴가 신청서 작성", "보안 설정 변경"]
+eval_scores = [1.0, 1.0]
+
+evaluator = CECorrelationEvaluator(eval_sentences1, eval_sentences2, eval_scores)
+
+# === 5. 학습 ===
+model.fit(
+    train_dataloader=train_dataloader,
+    epochs=3,
+    warmup_steps=100,
+    evaluator=evaluator,
+    evaluation_steps=500,
+    output_path="./finetuned_crossencoder",
+)
+
+# === 6. 학습된 모델 사용 ===
+model = CrossEncoder("./finetuned_crossencoder")
+
+query = "연차 휴가 신청 방법"
+documents = [
+    "휴가 신청서는 HR 시스템에서 제출합니다.",
+    "퇴직금 계산 방법을 안내합니다.",
+    "출장비는 경비 시스템에서 정산합니다.",
+]
+
+scores = model.predict([[query, doc] for doc in documents])
+ranked_results = sorted(zip(documents, scores), key=lambda x: x[1], reverse=True)
+
+for doc, score in ranked_results:
+    print(f"{score:.4f}: {doc}")
+```
+
+---
+
+## 부록 B: 운영 코드 예시
+
+### B.1 시스템 프롬프트 템플릿
+
+```python
+def create_system_prompt(company_name: str, domain: str) -> str:
+    return f"""당신은 {company_name}의 {domain} 전문가입니다.
+
+## 역할
+- 고객 문의에 정확하고 친절하게 답변
+- 회사 정책에 따라 일관된 응답 제공
+
+## 규칙
+1. 제공된 문서에 없는 내용은 "확인 후 안내드리겠습니다"라고 답변
+2. 민감한 개인정보는 절대 요청하지 않음
+3. 불확실한 경우 추측하지 않음
+
+## 응답 형식
+1. 핵심 답변 (1-2문장)
+2. 상세 설명 (필요시)
+3. 추가 안내사항
+"""
+
+# 사용 예시
+system_prompt = create_system_prompt("ABC은행", "금융 상담")
+```
+
+### B.2 Reranker를 활용한 검색 파이프라인
+
+```python
+from sentence_transformers import SentenceTransformer, CrossEncoder
+import numpy as np
+
+class RAGSearchPipeline:
+    def __init__(
+        self,
+        embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2",
+    ):
+        self.embedder = SentenceTransformer(embedding_model)
+        self.reranker = CrossEncoder(reranker_model)
+        self.documents = []
+        self.embeddings = None
+
+    def index_documents(self, documents: list[str]):
+        """문서 인덱싱"""
+        self.documents = documents
+        self.embeddings = self.embedder.encode(documents, convert_to_numpy=True)
+
+    def search(
+        self,
+        query: str,
+        top_k: int = 10,
+        rerank_top_n: int = 5,
+        threshold: float = 0.5,
+    ) -> list[dict]:
+        """검색 + 리랭킹"""
+        
+        # 1단계: Embedding 검색
+        query_embedding = self.embedder.encode(query, convert_to_numpy=True)
+        scores = np.dot(self.embeddings, query_embedding)
+        top_indices = np.argsort(scores)[::-1][:top_k]
+        
+        candidates = [self.documents[i] for i in top_indices]
+        
+        # 2단계: Cross-encoder 리랭킹
+        pairs = [[query, doc] for doc in candidates]
+        rerank_scores = self.reranker.predict(pairs)
+        
+        # 3단계: 결과 정렬 및 필터링
+        results = []
+        for doc, score in sorted(zip(candidates, rerank_scores), key=lambda x: x[1], reverse=True):
+            if score >= threshold:
+                results.append({"document": doc, "score": float(score)})
+            if len(results) >= rerank_top_n:
+                break
+        
+        return results
+
+
+# 사용 예시
+pipeline = RAGSearchPipeline()
+
+documents = [
+    "휴가 신청서는 HR 시스템에서 최소 3일 전에 제출합니다.",
+    "퇴직금은 근속연수에 따라 계산됩니다.",
+    "출장비는 경비 시스템에서 정산합니다.",
+    "연차는 1년 근속 시 15일이 부여됩니다.",
+]
+
+pipeline.index_documents(documents)
+results = pipeline.search("연차 휴가 신청 방법", top_k=10, rerank_top_n=3)
+
+for r in results:
+    print(f"{r['score']:.4f}: {r['document']}")
+```
+
+### B.3 Cache 확인용 Cross-encoder 활용
+
+```python
+from sentence_transformers import CrossEncoder
+
+class QueryCache:
+    def __init__(
+        self,
+        model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2",
+        threshold: float = 0.8,
+    ):
+        self.model = CrossEncoder(model_name)
+        self.threshold = threshold
+        self.cache = {}  # {query: response}
+
+    def get_cached_response(self, query: str) -> str | None:
+        """캐시된 응답 반환. 없으면 None"""
+        if not self.cache:
+            return None
+        
+        cached_queries = list(self.cache.keys())
+        pairs = [[query, cached_q] for cached_q in cached_queries]
+        scores = self.model.predict(pairs)
+        
+        max_idx = scores.argmax()
+        max_score = scores[max_idx]
+        
+        if max_score >= self.threshold:
+            matched_query = cached_queries[max_idx]
+            return self.cache[matched_query]
+        
+        return None
+
+    def add_to_cache(self, query: str, response: str):
+        """캐시에 추가"""
+        self.cache[query] = response
+
+
+# 사용 예시
+cache = QueryCache(threshold=0.85)
+
+# 캐시에 추가
+cache.add_to_cache(
+    "연차 휴가 신청 방법이 어떻게 되나요?",
+    "HR 시스템에서 휴가신청 메뉴를 통해 최소 3일 전에 신청하시면 됩니다."
+)
+
+# 유사한 질문으로 캐시 조회
+response = cache.get_cached_response("연차 신청은 어떻게 하나요?")
+if response:
+    print(f"캐시 히트: {response}")
+else:
+    print("캐시 미스: LLM 호출 필요")
+```
+
+---
+
+## 부록 C: 도구
+
+|용도|도구|
+|---|---|
+|RAG 평가|RAGAS|
+|IR 지표 계산|pytrec_eval|
+|Embedding/Reranker 학습|Sentence-Transformers|
+|효율적 Fine-tuning|Hugging Face PEFT|
+|드리프트 감지|Evidently AI|
+
+
+----

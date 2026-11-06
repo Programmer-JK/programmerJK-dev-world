@@ -1,0 +1,59 @@
+---
+title: "금융권 인사·조직 시스템 고도화 — 폐쇄망에서 3개월"
+summary: "금융권 폐쇄망 환경에서 인사 시스템 신규 기능을 설계부터 운영 배포까지 맡은 프로젝트 기록."
+date: 2026-10-30
+island: forest
+room: projects
+project: finance-orgn
+tags: ["Java", "JSP", "Oracle", "폐쇄망", "마이그레이션"]
+---
+
+2026년 7월 말부터 10월까지 약 3개월 동안 고객사에 상주하며 인사·조직 시스템 고도화에 참여했다. 화면·DB 설계, SQL과 프로시저, 데이터 마이그레이션, 반입과 배포까지 풀스택으로 맡았다.
+
+| 항목 | 내용 |
+|---|---|
+| 기간 | 2026.07 말 ~ 2026.10 (약 3개월, 상주) |
+| 역할 | 화면·DB 설계, SQL·프로시저, 데이터 마이그레이션, 반입·배포, 운영 안정화 |
+| 환경 | 금융권 폐쇄망 — 외부 라이브러리와 라이선스는 반입 절차를 거쳐야 함 |
+| 기술 | Java 8, JSP·Servlet, Oracle SQL·PL/SQL, DBMS_LOB, Summernote 0.9.1, IBMap, IBSheet7 |
+
+## 결과 한눈에
+
+- 마이그레이션 데이터 전체 용량 **5GB → 약 1/10**
+- 레코드당 크기 **100MB → 10MB**, 렌더링 **10배 이상** 빨라짐
+- 2026년 10월 **운영 배포와 운영 마이그레이션 완료**
+
+## 문제 해결 사례
+
+### 1. 위키 → Oracle 대용량 마이그레이션
+
+기존 위키(Confluence)에 쌓인 영업점 방문 기록을 새 시스템으로 옮겼다. 위키 HTML을 태그 단위로 잘라 임시 테이블에 올리고, 첨부 이미지는 base64로 바꿔 넣는 Java 도구를 만들었다. 적재 중 장애가 세 단계로 나타났다 — 테이블스페이스 부족, 서버 OOM, 그리고 DB 서버 다운. 이 과정은 [유적 기록](/posts/orgn-migration-postmortem)에 따로 정리했다.
+
+현업 담당자가 직접 돌릴 수 있도록 마이그레이션을 **버튼 한 번 + 실시간 진행률·로그** 웹 화면으로 만들었다.
+
+### 2. 폐쇄망에서 Notion식 에디터
+
+표와 이미지를 자유롭게 넣고 슬래시 명령을 쓰는 에디터가 필요했다. 처음엔 editor.js로 새로 만들 계획이었지만, 반입 리스크를 줄이려고 **이미 이식된 Summernote에 플러그인을 붙이는 쪽**으로 바꿨다. 이미지 크기 편집을 위해 0.9.1로 올리고 크기 조절, 확대 보기, 조회 모드 툴바 숨김까지 구현했다. 가장 오래 붙잡은 문제는 [플러그인 로딩](/posts/summernote-plugin-loading-iframe)이었다.
+
+### 3. 보안 정책에 따른 지도 전환
+
+지점과 직원 위치를 보여주던 지도검색 화면이 보안 이슈로 기존 지도 API를 쓸 수 없게 됐다. IBMap으로 교체해 마커와 이동시간 경로선을 다시 구현했고, 개발 → 반입 → 라이선스 → 개발서버 → 운영 배포까지 직접 조율했다. 기존 좌표를 위경도로 바꾸는 [좌표 변환 함수](/posts/oracle-wcongnamul-to-wgs84)도 이때 만들었다.
+
+## 기술 영역별 기록
+
+- [Oracle 변경 감지 SQL: NULL까지 비교하고 UNPIVOT으로 펼치기](/posts/oracle-change-detection-sql)
+- [느려진 쿼리와 부풀어 오른 건수 — 실행계획과 중복 진단](/posts/oracle-xplan-duplicate-diagnosis)
+- [PL/SQL 업로드·마감 프로시저: 예외, SAVEPOINT, 행 잠금](/posts/plsql-upload-close-procedure)
+- [Oracle 임시 LOB과 공간 부족 진단](/posts/oracle-temporary-lob-space)
+- [카카오 내부 좌표를 WGS84로: PL/SQL로 TM 역변환](/posts/oracle-wcongnamul-to-wgs84)
+- [Confluence HTML을 Oracle로 옮긴 Java 마이그레이션 도구](/posts/java-html-to-oracle-migration)
+- [템플릿 메서드로 만든 BLOB 첨부 ZIP 다운로드 Servlet](/posts/java-zip-download-servlet)
+- [Summernote 플러그인이 안 붙을 때 — iframe과 로딩 순서](/posts/summernote-plugin-loading-iframe)
+- [JSP·iframe 화면에서 만난 JavaScript 함정들](/posts/jsp-iframe-javascript-pitfalls)
+- [폐쇄망 배포가 코드 규칙을 바꾼다](/posts/closed-network-deploy-lessons)
+
+## 반복해서 쓴 접근법
+
+1. **원인을 층마다 분리한다** — 마이그레이션 장애를 공간 → 레코드 크기 → 임시 LOB 순으로 하나씩 걷어냈다.
+2. **환경 제약 안에서 대안을 고른다** — 반입 부담 때문에 기존 에디터를 확장했고, 보안 정책에 맞춰 지도를 바꿨다.
+3. **운영자가 혼자 쓸 수 있게 만든다** — 원클릭 실행 화면과 실시간 로그, 안내 문구의 설정값 분리.

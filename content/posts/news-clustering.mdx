@@ -1,0 +1,135 @@
+---
+title: "뉴스 클러스터링 문제"
+date: 2024-11-26
+island: library
+room: algo
+tags: []
+---
+## 문제 설명
+
+두 문자열의 유사도를 자카드 유사도(Jaccard Similarity)로 계산하는 문제입니다. 자카드 유사도는 두 집합의 교집합 크기를 합집합 크기로 나눈 값입니다.
+
+### 자카드 유사도 계산 예시
+
+```
+A = {FR, RA, AN, NC, CE}
+B = {FR, RE, EN, NC, CH}
+교집합 = {FR, NC}
+합집합 = {FR, RA, AN, NC, CE, RE, EN, CH}
+자카드 유사도 = 2/8 = 0.25
+```
+
+## 제한 조건
+
+1. 입력 문자열 (str1, str2)
+
+   - 길이: 2 ≤ 길이 ≤ 1,000
+   - 두 글자씩 끊어서 다중집합 생성
+   - 영문자로 된 글자 쌍만 유효
+
+2. 문자열 처리 규칙
+   - 대소문자 구분 없음
+   - 특수문자, 공백, 숫자 포함된 쌍은 제외
+   - 공집합일 경우 유사도 1로 정의
+
+## 해결 코드
+
+```javascript
+function solution(str1, str2) {
+  var answer = 0;
+  let arrA = [];
+  let arrB = [];
+  const reg = /[!@#$%^&*(){}~+=1-9\s]/;
+  const reg2 = /[^a-zA-Z]/;
+  let interSet = [];
+  let unionSet = [];
+
+  // str1 처리
+  for (let i = 0; i < str1.length; i++) {
+    let letter = str1.slice(i, i + 2).toUpperCase();
+    if (!reg2.test(letter) && letter.length == 2) {
+      arrA.push(letter);
+    }
+  }
+
+  // str2 처리
+  for (let i = 0; i < str2.length; i++) {
+    let letter = str2.slice(i, i + 2).toUpperCase();
+    if (!reg2.test(letter) && letter.length == 2) {
+      arrB.push(letter);
+    }
+  }
+
+  // 교집합과 합집합 계산
+  for (let i = 0; i < arrA.length; i++) {
+    if (arrB.includes(arrA[i])) {
+      const idx = arrB.indexOf(arrA[i]);
+      arrB.splice(idx, 1);
+      interSet.push(arrA[i]);
+    } else {
+      unionSet.push(arrA[i]);
+    }
+  }
+  unionSet.push(...arrB);
+
+  // 결과 계산
+  answer =
+    interSet.length === 0 && unionSet.length === 0
+      ? 65536
+      : Math.floor(
+          (interSet.length / (interSet.length + unionSet.length)) * 65536
+        );
+
+  return answer;
+}
+```
+
+## 알고리즘 설명
+
+1. 문자열 전처리
+
+   - 두 글자씩 분리
+   - 대문자로 통일
+   - 유효한 문자쌍만 선택
+
+2. 집합 처리
+
+   - 교집합: 양쪽 모두에 있는 원소
+   - 합집합: 교집합 + 나머지 원소들
+
+3. 유사도 계산
+   ```
+   유사도 = 교집합 크기 / 합집합 크기 * 65536
+   ```
+
+## 주요 메서드 설명
+
+1. 정규표현식
+
+```javascript
+const reg2 = /[^a-zA-Z]/; // 영문자가 아닌 문자 매칭
+reg2.test(string); // 문자열 테스트
+```
+
+2. 문자열 메서드
+
+```javascript
+str.slice(start, end); // 문자열 자르기
+str.toUpperCase(); // 대문자 변환
+```
+
+3. 배열 메서드
+
+```javascript
+arr.includes(); // 요소 포함 여부 확인
+arr.indexOf(); // 요소 위치 찾기
+arr.splice(); // 요소 제거/추가
+```
+
+## 시간 복잡도
+
+- O(n \* m): n, m은 각각 str1, str2의 길이
+
+## 공간 복잡도
+
+- O(n + m): 두 문자열에서 생성된 다중집합 저장

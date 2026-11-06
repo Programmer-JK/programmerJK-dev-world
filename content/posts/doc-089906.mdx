@@ -1,0 +1,155 @@
+---
+title: "Zustand vs Redux"
+date: 2025-01-08
+island: library
+room: frontend
+tags: []
+---
+### 기본 컨셉과 철학
+
+Redux는 전통적인 Flux 아키텍처를 따르며, 예측 가능한 상태 관리를 위해 엄격한 규칙을 가지고 있습니다. 반면 Zustand는 더 현대적이고 유연한 접근 방식을 취합니다. 코드로 비교해보겠습니다:
+
+**Redux 예시:**
+```javascript
+// Redux - 상태 관리
+const initialState = { count: 0 };
+
+// 리듀서 정의
+const reducer = (state = initialState, action) => {
+  switch (action.type) {
+    case 'INCREMENT':
+      return { count: state.count + 1 };
+    default:
+      return state;
+  }
+};
+
+// 스토어 생성
+const store = createStore(reducer);
+
+// 컴포넌트에서 사용
+function Counter() {
+  const count = useSelector(state => state.count);
+  const dispatch = useDispatch();
+
+  return (
+    <button onClick={() => dispatch({ type: 'INCREMENT' })}>
+      Count: {count}
+    </button>
+  );
+}
+```
+
+**Zustand 예시:**
+```javascript
+// Zustand - 상태 관리
+const useStore = create((set) => ({
+  count: 0,
+  increment: () => set((state) => ({ count: state.count + 1 }))
+}));
+
+// 컴포넌트에서 사용
+function Counter() {
+  const { count, increment } = useStore();
+
+  return (
+    <button onClick={increment}>
+      Count: {count}
+    </button>
+  );
+}
+```
+
+### 주요 차이점
+
+1. **복잡성과 보일러플레이트**
+   - Redux는 액션, 리듀서, 디스패치 등 여러 개념을 이해해야 하고, 기본 설정에 많은 코드가 필요합니다.
+   - Zustand는 훨씬 단순하며, React Hooks처럼 직관적으로 사용할 수 있습니다.
+
+2. **성능과 최적화**
+   - Redux는 상태가 변경될 때마다 전체 스토어를 업데이트하므로, 성능 최적화를 위해 추가적인 작업이 필요할 수 있습니다.
+   - Zustand는 자동 메모이제이션과 세밀한 업데이트를 지원하여 기본적으로 더 나은 성능을 제공합니다.
+
+3. **미들웨어와 확장성**
+```javascript
+// Redux 미들웨어 예시
+const logger = store => next => action => {
+  console.log('dispatching', action);
+  return next(action);
+};
+
+// Zustand 미들웨어 예시
+const useStore = create(
+  devtools(
+    persist(
+      (set) => ({
+        count: 0,
+        increment: () => set((state) => ({ count: state.count + 1 }))
+      }),
+      { name: 'counter-storage' }
+    )
+  )
+);
+```
+
+4. **학습 곡선**
+   - Redux는 상대적으로 가파른 학습 곡선을 가지고 있으며, 여러 개념을 이해해야 합니다.
+   - Zustand는 React Hooks와 유사한 API를 제공하여 학습이 쉽습니다.
+
+### 언제 어떤 것을 선택해야 할까?
+
+**Redux를 선택하면 좋은 경우:**
+- 큰 규모의 애플리케이션에서 복잡한 상태 로직이 필요할 때
+- 엄격한 규칙과 예측 가능한 상태 흐름이 중요할 때
+- 기존의 Redux 생태계와 도구들을 활용하고 싶을 때
+
+**Zustand를 선택하면 좋은 경우:**
+- 작거나 중간 규모의 프로젝트
+- 빠른 개발과 간단한 설정이 필요할 때
+- 성능이 중요하고 보일러플레이트를 최소화하고 싶을 때
+
+### 실제 사용 예시
+
+간단한 투두 리스트를 만들어 두 라이브러리의 차이를 보여드리겠습니다:
+
+**Redux 버전:**
+```javascript
+// 액션 타입 정의
+const ADD_TODO = 'ADD_TODO';
+const TOGGLE_TODO = 'TOGGLE_TODO';
+
+// 리듀서
+const todoReducer = (state = [], action) => {
+  switch (action.type) {
+    case ADD_TODO:
+      return [...state, { text: action.text, completed: false }];
+    case TOGGLE_TODO:
+      return state.map((todo, index) =>
+        index === action.index
+          ? { ...todo, completed: !todo.completed }
+          : todo
+      );
+    default:
+      return state;
+  }
+};
+```
+
+**Zustand 버전:**
+```javascript
+const useTodoStore = create((set) => ({
+  todos: [],
+  addTodo: (text) => 
+    set((state) => ({
+      todos: [...state.todos, { text, completed: false }]
+    })),
+  toggleTodo: (index) =>
+    set((state) => ({
+      todos: state.todos.map((todo, i) =>
+        i === index ? { ...todo, completed: !todo.completed } : todo
+      )
+    }))
+}));
+```
+
+이처럼 Zustand는 더 간단하고 직관적인 API를 제공하지만, Redux는 더 구조화된 접근 방식을 제공합니다. 프로젝트의 요구사항과 팀의 선호도에 따라 적절한 도구를 선택하시면 됩니다.

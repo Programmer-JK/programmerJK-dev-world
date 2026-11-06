@@ -1,0 +1,130 @@
+---
+title: "리눅스 보안 및 파일 공유 가이드"
+summary: "SSH 보안 강화, MySQL 외부 접속, NFS 설정에 대한 종합적인 가이드"
+date: 2024-12-01
+island: library
+room: devops
+tags: ["linux-security", "ssh-configuration", "mysql-administration", "nfs-setup", "network-security", "system-administration"]
+---
+## 1. SSH 보안 강화
+
+### 무단 접근 대응
+
+```bash
+# IP 차단
+sudo ufw deny from 공격자IP
+
+# SSH 보안 설정
+sudo nano /etc/ssh/sshd_config
+```
+
+### 권장 SSH 설정
+
+```ini
+Port 2222                    # 기본 포트 변경
+PermitRootLogin no          # root 로그인 차단
+PasswordAuthentication no   # 비밀번호 인증 비활성화
+MaxAuthTries 3             # 최대 시도 횟수 제한
+```
+
+### Fail2ban 설정
+
+```bash
+# 설치 및 설정
+sudo apt install fail2ban
+sudo cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.local
+sudo systemctl restart fail2ban
+```
+
+## 2. MySQL 외부 접속 설정
+
+### MySQL 기본 설정
+
+```bash
+# 설정 파일 수정
+sudo nano /etc/mysql/mysql.conf.d/mysqld.cnf
+bind-address = 0.0.0.0
+
+# MySQL 재시작
+sudo systemctl restart mysql
+```
+
+### 사용자 및 권한 설정
+
+```sql
+-- 비밀번호 정책 설정
+SET GLOBAL validate_password.policy = LOW;
+SET GLOBAL validate_password.length = 4;
+
+-- root 사용자 설정
+ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '비밀번호';
+CREATE USER 'root'@'%' IDENTIFIED WITH mysql_native_password BY '비밀번호';
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+```
+
+### 방화벽 설정
+
+```bash
+sudo ufw allow 3306
+```
+
+## 3. NFS 설정
+
+### 서버 설정 (Ubuntu)
+
+```bash
+# 패키지 설치
+sudo apt install nfs-kernel-server
+
+# 공유 디렉토리 설정
+sudo mkdir -p /mnt/nfs_share
+sudo chown nobody:nogroup /mnt/nfs_share
+sudo chmod 777 /mnt/nfs_share
+
+# NFS 설정
+echo "/mnt/nfs_share    클라이언트IP(rw,sync,no_subtree_check)" | sudo tee -a /etc/exports
+sudo exportfs -a
+sudo systemctl restart nfs-kernel-server
+```
+
+### 클라이언트 설정 (CentOS)
+
+```bash
+# 패키지 설치 및 서비스 시작
+sudo yum install nfs-utils
+sudo systemctl start rpcbind nfs-server
+sudo systemctl enable rpcbind nfs-server
+
+# 마운트 설정
+sudo mkdir -p /mnt/nfs_client
+sudo mount -t nfs 서버IP:/mnt/nfs_share /mnt/nfs_client
+
+# 영구 마운트
+echo "서버IP:/mnt/nfs_share    /mnt/nfs_client   nfs    defaults   0   0" | sudo tee -a /etc/fstab
+```
+
+### 문제 해결
+
+```bash
+# 연결 확인
+df -h | grep nfs
+mount | grep nfs
+
+# 서비스 재시작
+sudo systemctl restart nfs-kernel-server  # 서버
+sudo systemctl restart rpcbind nfs-server # 클라이언트
+
+# 방화벽 포트 개방
+sudo ufw allow from 클라이언트IP to any port nfs
+sudo ufw allow from 클라이언트IP to any port 111
+sudo ufw allow from 클라이언트IP to any port 2049
+```
+
+## 4. 보안 모니터링 및 유지보수
+
+- SSH 로그 정기 검사
+- 시스템 업데이트 수행
+- 방화벽 규칙 정기 검토
+- 불필요한 서비스 비활성화
+- 접근 권한 주기적 감사

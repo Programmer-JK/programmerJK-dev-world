@@ -1,0 +1,99 @@
+---
+title: "커스텀 자동 포커스 기능"
+summary: "캄보디아 현지 프로젝트에서 요구됐던 자동 포커스 기능을 Vue 커스텀 디렉티브로 구현한 경험 공유"
+date: 2025-01-04
+island: library
+room: frontend
+tags: ["Vue.js", "directive", "custom-directive", "frontend"]
+---
+개발 현장에서 실제로 구현했던 Vue 디렉티브 경험을 공유하고자 합니다. 해외 프로젝트에서 마주쳤던 특별한 요구사항과 이를 해결하기 위한 과정을 소개합니다.
+
+### 프로젝트 배경
+
+캄보디아 현지 프로젝트에서 폼 입력 시 사용자 경험 개선이 필요했습니다. 특히 모달이나 다이얼로그가 열릴 때 자동으로 특정 입력 필드에 포커스를 주어야 하는 요구사항이 있었습니다.
+
+### 해결 방법: 커스텀 디렉티브 구현
+
+Vue의 커스텀 디렉티브를 활용하여 자동 포커스 기능을 구현했습니다:
+
+```typescript
+import { Directive } from "vue";
+
+export const appAutoFocus: Directive<any, boolean> = {
+    mounted: (el, binding) => {
+        el['autoFocus'] = {
+            dead: false,
+            do: function(){
+                setTimeout(() => {
+                    if(!this.dead){
+                        if(el?.setFocus){
+                            el.setFocus();
+                        }else if(el?.click){
+                            el.click()
+                        }
+                    }
+                }, 30)
+            }
+        }
+        if(binding.value && el['autoFocus']['do']){
+            el['autoFocus']['do']()
+        }
+    },
+    // ... 나머지 구현 코드
+}
+```
+
+### 구현 시 고려사항
+
+1. **타이밍 제어**
+   - DOM 렌더링 완료를 보장하기 위해 30ms 딜레이를 적용
+   - 비동기 처리로 인한 문제 방지
+
+2. **메모리 관리**
+   - 컴포넌트 언마운트 시 dead 플래그를 통한 정리
+   - 불필요한 이벤트 실행 방지
+
+3. **다양한 엘리먼트 지원**
+   - setFocus와 click 메서드를 순차적으로 체크
+   - 다양한 HTML 엘리먼트에 대응 가능
+
+### 실제 사용 예시
+
+```vue
+<template>
+  <div class="modal">
+    <input 
+      v-appAutoFocus="isModalOpen" 
+      type="text" 
+      placeholder="이름을 입력하세요"
+    />
+  </div>
+</template>
+
+<script>
+export default {
+  directives: { 
+    appAutoFocus 
+  },
+  data() {
+    return {
+      isModalOpen: false
+    }
+  }
+}
+</script>
+```
+
+### 프로젝트 적용 결과
+
+- 모달 다이얼로그 UX 개선
+- 폼 입력 시 사용자 편의성 향상
+- 코드 재사용성 확보
+
+### 배운 점
+
+1. Vue 디렉티브의 생명주기를 깊이 이해하게 됨
+2. 타이밍 관련 이슈 해결 능력 향상
+3. 재사용 가능한 컴포넌트 설계의 중요성
+
+이러한 경험을 통해 Vue의 디렉티브가 얼마나 강력하고 유용한 기능인지 다시 한번 깨달을 수 있었습니다.

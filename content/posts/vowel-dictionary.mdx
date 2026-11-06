@@ -1,0 +1,123 @@
+---
+title: "모음 사전"
+date: 2024-11-12
+island: library
+room: algo
+tags: []
+---
+## [모음 사전 문제 L2](https://school.programmers.co.kr/learn/courses/30/lessons/84512)
+
+## 문제 설명
+
+알파벳 모음('A', 'E', 'I', 'O', 'U')만을 사용하여 만들 수 있는 길이 5 이하의 모든 단어를 사전에 수록하고, 주어진 단어가 사전에서 몇 번째에 위치하는지 찾는 문제입니다.
+
+### 사전 구성 예시
+
+```
+1번: "A"
+2번: "AA"
+3번: "AAA"
+...
+마지막: "UUUUU"
+```
+
+## 제한 조건
+
+1. word 제한
+   - 길이: 1 ≤ length ≤ 5
+   - 구성: 'A', 'E', 'I', 'O', 'U'만 사용
+
+## 해결 코드
+
+```javascript
+function solution(word) {
+  var answer = 0;
+  let arr = ["A", "E", "I", "O", "U"];
+  let count = 0;
+  const dfs = (str) => {
+    if (str.length > 5) return;
+    if (str == word) {
+      ans = count;
+      return;
+    }
+    count++;
+    for (let i = 0; i < arr.length; i++) {
+      dfs(str + arr[i]);
+    }
+  };
+  dfs("");
+  return ans;
+}
+```
+
+## 알고리즘 설명
+
+1. DFS(깊이 우선 탐색) 사용
+
+   - 빈 문자열("")부터 시작
+   - 모음을 하나씩 추가하며 모든 가능한 조합 생성
+
+2. DFS 함수의 동작
+
+   ```javascript
+   const dfs = (str) => {
+     // 길이가 5를 초과하면 종료
+     if (str.length > 5) return;
+
+     // 목표 단어를 찾으면 현재 카운트 저장
+     if (str == word) {
+       ans = count;
+       return;
+     }
+
+     // 카운트 증가 및 다음 단어 탐색
+     count++;
+     for (let i = 0; i < arr.length; i++) {
+       dfs(str + arr[i]);
+     }
+   };
+   ```
+
+3. 사전 순서 생성 방식
+   - A → AA → AAA → AAAA → AAAAA
+   - AAAAE → AAAAI → AAAAO → AAAAU
+   - AAAE → AAAEA → ...
+
+## 구현 특징
+
+1. 재귀적 구조
+
+   - 각 단계에서 5개의 모음을 추가하여 새로운 단어 생성
+   - 최대 깊이 5까지 탐색
+
+2. 카운팅 방식
+
+   - 새로운 단어를 만들 때마다 카운트 증가
+   - 목표 단어를 찾으면 현재까지의 카운트가 답
+
+3. 탐색 종료 조건
+   - 단어 길이가 5를 초과할 때
+   - 목표 단어를 찾았을 때
+
+## 시간 복잡도
+
+- O(5⁵): 각 위치에서 5개의 선택지
+- 최대 깊이 5까지 탐색
+
+## 공간 복잡도
+
+- O(5): 재귀 호출 스택 깊이
+- 추가 배열 저장 없음
+
+## 예시 실행
+
+입력: "AAAAE"
+
+```
+1. A
+2. AA
+3. AAA
+4. AAAA
+5. AAAAA
+6. AAAAE (답: 6)
+```

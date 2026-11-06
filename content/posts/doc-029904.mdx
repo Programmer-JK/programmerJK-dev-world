@@ -1,0 +1,89 @@
+---
+title: "Prettier"
+summary: "코드 포매터 Prettier의 개념, 설치, 설정 및 ESLint와의 통합 방법 설명"
+date: 2024-10-21
+island: library
+room: devops
+tags: ["prettier", "code-formatting", "eslint-integration", "development-tools", "coding-style", "code-quality", "javascript-tools"]
+---
+### Prettier란
+- 일관적인 코드 스타일을 유지할 수 있게 도와주는 툴  
+	ex) 줄 바꿈, 공백, 들여 쓰기 등과 같은 스타일 교정
+- 설정된 규칙에 따라 코드를 자동으로 수정하여 가독성을 높인다
+- 프로젝트 전체에서 통일된 코드 스타일을 보장한다.
+
+#### Code Formatter
+- 개발자가 작성한 코드를 정해진 코딩 스타일을 따르도록 자동으로 변환해주는 도구
+
+#### 왜 Prettier인가?
+- Prettier에서 정해놓은 코딩 스타일들은 오랜기간 개발자 커뮤니티의 의견이 수렴되어 결정이 된 것이기 때문에 대부분 타당한 경우가 많다
+- 단순히 개발자가 작성한 코드를 수정해주는 게 아니라 구문 분석 후 완전히 재작성을 해준다
+
+#### Prettier 설치
+```null
+$ npm i -D prettier
+```
+- Prettier는 애플리케이션 실행 시점에는 필요가 없다
+
+#### Prettier 실행
+```null
+$ npx prettier "파일명.파일형식"
+```
+- 위 명령어를 통해 코드 포맷팅이 이루어진 결과값을 반환한다. 또는 `--check` 옵션 사용
+- 코드 자체가 변경되지는 않는다.
+
+```bash
+$ npx prettier --write "index.js"
+```
+- `--write` 옵션을 통해 코드 자체를 변경할 수 있다.
+
+#### Prettier 세팅
+- 루트 폴더에 .prettierrc 파일 생성
+```json
+{ 
+	// 줄바꿈에 사용할 문자를 정의합니다. (예: LF 또는 CRLF) 
+	"endOfLine": "lf", 
+	// 세미콜론 사용 여부를 정의합니다. 
+	"semi": true, 
+	// 문자열에 사용할 따옴표의 종류를 정의합니다. (예: single 또는 double) 
+	"singleQuote": true, 
+	// 들여쓰기에 사용할 스페이스의 개수를 정의합니다. 
+	"tabWidth": 2, 
+	// 파일 끝에 개행 문자를 추가할지 여부를 정의합니다. 
+	"trailingComma": "all" 
+}
+```
+### ESLint와 같이 사용
+- ESlint : 코드의 퀄리티를 일관되게 보장하고, 에러가 발생할 가능성이 높은 패턴을 찾아주는 역할
+- Prettier : 코드의 스타일링에만 집중
+- Linter Rule은 크게 Formatting과 Code Quality로 나뉘는데, 코드 퀄리티 룰의 경우 Prettier가 대체할 수 없다.
+- ESLint보다 Prettier가 코드 포맷팅 기능에 더 특화되어 있으므로, 최대 글자 길이에 맞춘 자동 포맷팅과 같은 기능을 시행할 수 있다.
+
+- 둘을 같이 사용할 시 공통 기능이 있어 상호간의 충돌이 발생
+- 이를 방지하기 위해 두가지 plugin을 사용
+	1. `eslint-plugin-prettier`  
+	    prettier을 ESLint 플러그인으로 추가하여 prettier에서 인식하는 코드상의 포맷 오류를 ESLint 오류로 출력해준다.  
+	    github : [eslint-plugin-prettier](https://github.com/prettier/eslint-plugin-prettier)
+	2. `eslint-config-prettier`  
+	    ESLint의 formatting 관련 설정 중 prettier와 충돌하는 부분을 비활성화 한다.  
+	    github : [eslint-config-prettier](https://github.com/prettier/eslint-config-prettier)
+
+##### 충돌 방지 플러그인 설치
+```null
+$ yarn add -D eslint-config-prettier eslint-plugin-prettier
+```
+##### 적용
+```json
+{
+  "extends": [
+    "some-other-config-you-use",
+    "prettier"
+  ]
+  
+  "plugins": ["prettier"],
+
+  "rules": {
+  "prettier/prettier": "error"
+  }
+}
+```

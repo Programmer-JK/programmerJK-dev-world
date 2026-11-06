@@ -1,0 +1,95 @@
+---
+title: "자바스크립트에서의 객체 비교와 참조 타입"
+date: 2025-04-25
+island: library
+room: frontend
+tags: ["JavaScript", "Reference Type"]
+---
+자바스크립트에서 객체와 배열을 비교할 때 발생하는 중요한 개념에 대해 정리해 드리겠습니다.
+
+## 원시 타입 vs 참조 타입
+
+자바스크립트의 데이터 타입은 크게 두 가지로 나눌 수 있습니다:
+
+1. **원시 타입(Primitive Types)**:
+    
+    - 문자열(String), 숫자(Number), 불리언(Boolean), null, undefined, Symbol, BigInt
+    - 값 자체가 직접 저장되고 비교됨
+2. **참조 타입(Reference Types)**:
+    
+    - 객체(Object), 배열(Array), 함수(Function) 등
+    - 값이 아닌 메모리 주소(참조)가 저장됨
+
+## 참조 타입 비교의 특성
+
+```javascript
+[] === []  // false
+{} === {}  // false
+```
+
+위 코드가 `false`를 반환하는 이유는 두 빈 배열/객체가 서로 다른 메모리 주소를 참조하기 때문입니다.
+
+```javascript
+const arr1 = [];
+const arr2 = [];
+const arr3 = arr1;
+
+arr1 === arr2  // false (다른 참조)
+arr1 === arr3  // true (같은 참조)
+```
+
+## 객체 비교 시 주의할 점
+
+1. **동등 연산자(`==`)와 일치 연산자(`===`)**: 참조 타입에서는 둘 다 참조값만 비교하므로 결과가 같음
+    
+2. **부정 비교 연산자(`!=`, `!==`)도 같은 원리**: `obj != []`는 항상 `true`가 됨 (서로 다른 객체이므로)
+    
+
+## 올바른 객체/배열 비교 방법
+
+### 1. 배열의 경우
+
+```javascript
+// 배열이 비어있는지 확인
+array.length === 0
+
+// 배열에 요소가 있는지 확인
+array.length > 0
+
+// 배열의 내용이 같은지 비교
+JSON.stringify(array1) === JSON.stringify(array2)
+```
+
+### 2. 객체의 경우
+
+```javascript
+// 객체가 비어있는지 확인
+Object.keys(obj).length === 0
+
+// 객체 내용 비교
+JSON.stringify(obj1) === JSON.stringify(obj2)
+```
+
+### 3. 안전한 접근
+
+```javascript
+// 옵셔널 체이닝을 사용한 안전한 접근
+obj?.property?.subProperty
+
+// 논리 연산자를 사용한 확인
+obj && obj.property && obj.property.length > 0
+```
+
+## 고려사항
+
+1. `JSON.stringify`를 사용한 비교는 간단하지만 몇 가지 제한이 있습니다:
+    
+    - 순환 참조가 있는 객체는 변환할 수 없음
+    - 함수, undefined, Symbol은 직렬화되지 않음
+    - 속성 순서가 다르면 다른 문자열로 간주됨
+2. 더 복잡한 비교가 필요한 경우 Lodash의 `_.isEqual()` 같은 유틸리티 함수나 직접 비교 함수를 작성하는 것이 좋습니다.
+    
+
+## 요약
+
+객체나 배열을 `==` 또는 `===`로 비교할 때는 내용이 아닌 참조값을 비교합니다. 따라서 내용 비교를 위해서는 위에서 설명한 방법들을 사용해야 합니다. 특히 조건문에서 객체/배열의 존재 여부나 내용 확인 시 주의가 필요합니다.

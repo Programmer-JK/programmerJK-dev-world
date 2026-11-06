@@ -1,0 +1,64 @@
+---
+title: "CentOS MySQL 설치 가이드"
+summary: "CentOS 환경에서 MySQL 5.5.50 소스코드 컴파일 및 설치 방법에 대한 상세 가이드"
+date: 2024-12-05
+island: library
+room: devops
+tags: ["mysql", "centos", "database", "source-installation", "server-setup"]
+---
+MySQL 5.5.50 소스코드 설치 가이드를 정리해드리겠습니다:
+
+1. **기본 준비**
+```bash
+# 개발도구 설치
+sudo yum groupinstall "Development Tools"
+sudo yum install cmake ncurses-devel
+
+# MySQL 계정 생성
+sudo groupadd mysql
+sudo useradd -r -g mysql -s /bin/false mysql
+```
+
+2. **설치 과정**
+```bash
+# 압축해제
+tar xvf mysql-5.5.50.tar.gz
+cd mysql-5.5.50
+
+# 컴파일 설정 및 설치
+cmake . -DCMAKE_INSTALL_PREFIX=/usr/local/mysql \
+-DMYSQL_DATADIR=/usr/local/mysql/data \
+-DSYSCONFDIR=/etc \
+-DWITH_INNOBASE_STORAGE_ENGINE=1 \
+-DDEFAULT_CHARSET=utf8
+
+# 컴파일 및 설치 실행
+make
+sudo make install
+```
+
+3. **설치 후 설정**
+```bash
+# 디렉토리 권한 설정
+cd /usr/local/mysql
+sudo chown -R mysql .
+sudo chgrp -R mysql .
+sudo scripts/mysql_install_db --user=mysql
+sudo chown -R root .
+sudo chown -R mysql data
+
+# 설정 파일 복사
+sudo cp support-files/my-medium.cnf /etc/my.cnf
+
+# 서비스 등록
+sudo cp support-files/mysql.server /etc/init.d/mysql
+sudo chmod +x /etc/init.d/mysql
+sudo chkconfig --add mysql
+
+# MySQL 시작
+sudo service mysql start
+
+# 환경변수 설정
+echo 'export PATH=$PATH:/usr/local/mysql/bin' >> ~/.bash_profile
+source ~/.bash_profile
+```

@@ -1,0 +1,63 @@
+---
+title: "SPA와 CSR의 관계성"
+summary: "Single Page Application에서 Client Side Rendering이 적합한 이유와 구현 방식 설명"
+date: 2025-01-19
+island: library
+room: frontend
+tags: ["SPA", "CSR", "React", "web-development", "performance"]
+---
+## SPA(Single Page Application)의 특징
+
+SPA는 최초 한 번만 페이지를 로드하고, 이후에는 필요한 데이터만 서버에서 받아와서 동적으로 페이지를 업데이트하는 방식의 웹 애플리케이션입니다.
+
+## CSR이 SPA에 적합한 이유
+
+1. **페이지 전환 방식**
+   - CSR은 새로운 페이지로 이동할 때 전체 페이지를 다시 로드하지 않음
+   - JavaScript를 통해 필요한 부분만 변경하므로 SPA의 핵심 특징과 일치
+   - 브라우저의 history API를 활용해 URL 변경 가능
+
+2. **상태 관리의 용이성**
+   - 페이지 전환 시에도 JavaScript 메모리에 있는 상태가 유지됨
+   - React의 상태관리(예: Redux, Context API)를 효과적으로 활용 가능
+   - 사용자의 세션 정보나 임시 데이터를 쉽게 유지 가능
+
+3. **부드러운 사용자 경험**
+   - 페이지 전환 시 깜빡임이 없음
+   - 애니메이션 효과 구현이 용이
+   - 네이티브 앱과 유사한 사용자 경험 제공
+
+4. **데이터 처리의 효율성**
+   - 필요한 데이터만 JSON 형태로 주고받을 수 있음
+   - REST API나 GraphQL을 통한 효율적인 데이터 통신
+   - 서버와 클라이언트의 명확한 역할 분리
+
+## 사용 예시
+
+```javascript
+// React Router를 사용한 SPA 라우팅 예시
+function App() {
+  return (
+    <Router>
+      <div>
+        <Nav />
+        <Switch>
+          <Route path="/home">
+            <Home />
+          </Route>
+          <Route path="/about">
+            <About />
+          </Route>
+          <Route path="/users">
+            <Users />
+          </Route>
+        </Switch>
+      </div>
+    </Router>
+  );
+}
+```
+
+이런 구조에서 `/home`에서 `/about`으로 이동할 때, 전체 페이지를 다시 로드하지 않고 필요한 컴포넌트만 교체되므로 매우 효율적입니다.
+
+CSR은 이러한 SPA의 특성을 자연스럽게 지원하므로, 현대적인 웹 애플리케이션 개발에 매우 적합한 렌더링 방식이라고 할 수 있습니다.

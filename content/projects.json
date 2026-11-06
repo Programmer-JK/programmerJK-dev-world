@@ -1,0 +1,397 @@
+[
+  {
+    "slug": "finance-orgn",
+    "name": "금융권 인사·조직 시스템 고도화",
+    "status": "grown",
+    "growth": 5,
+    "summary": "금융권 폐쇄망에서 인사 시스템 신규 기능을 설계부터 운영 배포까지 맡았다. 대용량 마이그레이션 장애를 단계별로 해결하고, 반입 제약 안에서 대안 기술을 골랐다.",
+    "role": "풀스택 — 화면·DB 설계, SQL·프로시저, 데이터 마이그레이션, 반입·배포",
+    "period": "2026.07 – 2026.10",
+    "stack": [
+      "Java",
+      "JSP",
+      "Oracle",
+      "SQL",
+      "PL/SQL",
+      "Summernote",
+      "IBMap"
+    ],
+    "outcomes": [
+      "데이터 용량 약 5GB → 약 1/10 수준으로 축소",
+      "콘텐츠 렌더링 성능 10배 이상 개선",
+      "OOM 및 DB 장애 해결 · 2026.10 운영 배포"
+    ]
+  },
+  {
+    "slug": "our-little-archive",
+    "name": "Our Little Archive",
+    "status": "growing",
+    "growth": 2,
+    "summary": "초대된 두 계정만 쓰는 커플 기록 앱. 초대 코드는 서버에서 생성해 해시만 저장하고, Firestore Rules로 멤버 변경을 막았다.",
+    "role": "사이드 프로젝트 · 기획 · 디자인 · 개발",
+    "period": "2026.10 – 진행 중",
+    "stack": [
+      "Next.js 16",
+      "Firebase",
+      "Firestore Rules",
+      "Tailwind v4"
+    ],
+    "outcomes": [
+      "디자인 요소를 30% 덜어내는 리뷰로 재설계"
+    ]
+  },
+  {
+    "slug": "oxid",
+    "name": "Oxid HR AI Platform",
+    "status": "stopped",
+    "growth": 4,
+    "summary": "자연어 질의, HR 데이터 검색, 문서 기반 질의응답을 지원하는 AI 기반 HR 플랫폼.",
+    "role": "Inquiry 모듈 단독 설계 · 프론트엔드·백엔드 구현 · 권한별 접근 제어와 민감정보 마스킹 · FP8 양자화",
+    "period": "2026.04 – 2026.07",
+    "stack": [
+      "Next.js",
+      "FastAPI",
+      "Python",
+      "Qwen",
+      "vLLM",
+      "Docker",
+      "Playwright"
+    ],
+    "outcomes": [
+      "FP8 양자화로 VRAM 사용량 46.7% 절감",
+      "Inquiry 구현률 프론트엔드 99.8% / 백엔드 84.3%",
+      "단위 테스트 89개, E2E 테스트 48개 중 46개 통과"
+    ]
+  },
+  {
+    "slug": "noljora-arcade",
+    "name": "놀아조라 ARCADE",
+    "status": "growing",
+    "growth": 4,
+    "summary": "설치·가입 없이 방 코드로 즐기는 보드게임 9종 사이트. 서버 없이 Firebase Realtime DB 상태 머신으로 실시간 동기화한다.",
+    "role": "사이드 프로젝트 · 1인 기획·개발·배포",
+    "period": "2026.04 – 진행 중",
+    "stack": [
+      "Next.js 15",
+      "Firebase Realtime DB",
+      "Three.js",
+      "Howler.js"
+    ],
+    "outcomes": [
+      "보드게임 9종 실시간 멀티플레이"
+    ]
+  },
+  {
+    "slug": "zora-dev-world",
+    "name": "ZORA Dev World",
+    "status": "growing",
+    "growth": 2,
+    "summary": "지금 보고 있는 이 블로그. 픽셀 월드와 온톨로지 지식 지도로 기록을 잇는다.",
+    "role": "기획 · 디자인 · 개발",
+    "period": "2026.06 – 진행 중",
+    "stack": [
+      "Next.js",
+      "MDX",
+      "Ontology"
+    ],
+    "outcomes": [
+      "세 섬 구조와 온톨로지 3D 지식 지도 설계",
+      "로그인한 상태에서 화면으로 글·이미지·프로젝트를 고치는 필사실",
+      "블로그 글에 질문하는 Ask ZORA"
+    ]
+  },
+  {
+    "slug": "preserved-food-log",
+    "name": "보존식 기록 관리 시스템",
+    "status": "grown",
+    "growth": 5,
+    "summary": "급식센터 50~60대 조리사가 쓰는 보존식 기록 앱. 본문 23px, 화면 2개, 4단계 워크플로우로 단순하게 만들었다.",
+    "role": "납품 · 1인 개발",
+    "period": "2026.06",
+    "stack": [
+      "React 18",
+      "Vite",
+      "Vercel Serverless",
+      "Neon"
+    ],
+    "outcomes": [
+      "A4 인쇄 카드 · 엑셀 내보내기",
+      "납품 완료"
+    ]
+  },
+  {
+    "slug": "linky-lounge",
+    "name": "링키라운지 공식 홈페이지",
+    "status": "grown",
+    "growth": 5,
+    "summary": "서비스 소개부터 토스페이먼츠 결제까지 이어지는 공식 홈페이지.",
+    "role": "사이드 프로젝트 · 개발",
+    "period": "2026.01 – 2026.05",
+    "stack": [
+      "Next.js",
+      "TypeScript",
+      "Toss Payments"
+    ],
+    "outcomes": [
+      "토스페이먼츠 결제 연동"
+    ]
+  },
+  {
+    "slug": "softin-ai-agent",
+    "name": "Softin AI Agent",
+    "status": "stopped",
+    "growth": 4,
+    "summary": "자연어로 기업 데이터를 조회하고 활용하는 AI Agent. 질의 → Intent Classifier → (DB 조회는 NL2SQL / 문서 검색은 Hybrid RAG) → vLLM 서빙으로, 의도별로 경로를 나눈 것이 핵심.",
+    "role": "NL2SQL·하이브리드 RAG 파이프라인 · LoRA/QLoRA 파인튜닝 · vLLM 서빙 · 실행 환경 구성",
+    "period": "2026.01 – 2026.03",
+    "stack": [
+      "Python",
+      "FastAPI",
+      "LangChain",
+      "RAG",
+      "NL2SQL",
+      "vLLM",
+      "MLflow",
+      "Docker"
+    ],
+    "outcomes": [
+      "수집 → 전처리 → 학습 → 평가 → 서빙 흐름 구성",
+      "Intent Classifier 기반 Agent 라우팅",
+      "Docker Compose·Nginx 실행 환경"
+    ]
+  },
+  {
+    "slug": "ai-solution-poc",
+    "name": "AI Solution POC",
+    "status": "grown",
+    "growth": 3,
+    "summary": "기업 업무에 AI를 적용하기 위한 기술 검증 프로젝트.",
+    "role": "RAG·NL2SQL 구조 검증 · 아키텍처 설계 · 프로토타입 구현",
+    "period": "2025.10 – 2025.12",
+    "stack": [
+      "Python",
+      "FastAPI",
+      "LangChain",
+      "RAG",
+      "NL2SQL",
+      "VectorDB",
+      "vLLM"
+    ],
+    "outcomes": [
+      "VectorDB 5종 비교 및 적합성 분석",
+      "4개 처리 경로 기반 챗봇 아키텍처 설계",
+      "FastAPI + vLLM 프로토타입"
+    ]
+  },
+  {
+    "slug": "impac-matching",
+    "name": "ImpacMatching",
+    "status": "ruins",
+    "growth": 5,
+    "summary": "행사장에서 기업과 바이어의 B2B 미팅을 매칭하는 플랫폼.",
+    "role": "사이드 프로젝트 · 개발",
+    "period": "2025.07 – 2026.01",
+    "stack": [
+      "Next.js 16",
+      "Prisma",
+      "PostgreSQL",
+      "NextAuth"
+    ],
+    "outcomes": [
+      "관리자/기업/바이어 3역할 RBAC",
+      "인기 시간대 대기열 처리"
+    ]
+  },
+  {
+    "slug": "runique",
+    "name": "Runique",
+    "status": "grown",
+    "growth": 5,
+    "summary": "기업 고객과 일반 사용자를 연결하는 B2B 서비스.",
+    "role": "Next.js + Spring Boot 풀스택 · 인증·인가 · API 설계",
+    "period": "2025.05 – 2025.09",
+    "stack": [
+      "Next.js",
+      "TypeScript",
+      "Spring Boot",
+      "Java",
+      "PostgreSQL",
+      "JWT",
+      "Prisma"
+    ],
+    "outcomes": [
+      "구현률 홈페이지 98.6% / 백엔드 85.9% / 백오피스 88.5%",
+      "테스트 항목 100% 수행"
+    ]
+  },
+  {
+    "slug": "ibdashbuilder",
+    "name": "IBDashBuilder",
+    "status": "grown",
+    "growth": 5,
+    "summary": "데이터를 위젯 형태로 구성하고 관리하는 대시보드 빌더.",
+    "role": "프론트엔드 개발 · 기능 테스트",
+    "period": "2025.02 – 2025.09",
+    "stack": [
+      "React",
+      "TypeScript",
+      "JavaScript",
+      "Playwright"
+    ],
+    "outcomes": [
+      "위젯 13종과 위젯 편집·구성 인터페이스",
+      "i18n · 다크 모드 · PNG 다운로드"
+    ]
+  },
+  {
+    "slug": "meeting-type-test",
+    "name": "모임 성격 진단 웹앱",
+    "status": "grown",
+    "growth": 3,
+    "summary": "5문항으로 모임 성격을 4유형으로 진단하는 웹앱.",
+    "role": "사이드 프로젝트 · 개발",
+    "period": "2025.03 – 2026.03",
+    "stack": [
+      "Next.js",
+      "Framer Motion",
+      "Google Sheets API"
+    ],
+    "outcomes": [
+      "응답을 Google Sheets API로 수집"
+    ]
+  },
+  {
+    "slug": "aniwhere",
+    "name": "Aniwhere",
+    "status": "ruins",
+    "growth": 4,
+    "summary": "애니메이션 리뷰 사이트 팀 프로젝트.",
+    "role": "사이드 프로젝트 · 팀 개발",
+    "period": "2024.10 – 2025.12",
+    "stack": [
+      "Next.js",
+      "Spring Boot",
+      "MySQL"
+    ],
+    "outcomes": [
+      "ESLint·Prettier·Husky로 협업 규칙 정립"
+    ]
+  },
+  {
+    "slug": "native-test-app",
+    "name": "Native 기능 테스트 앱",
+    "status": "grown",
+    "growth": 3,
+    "summary": "모바일 플랫폼의 네이티브 기능을 검증하는 통합 테스트 앱.",
+    "role": "PM / QA Group Manager · 개발 (모빌씨앤씨 캄보디아)",
+    "period": "2024.06 – 2024.08",
+    "stack": [
+      "Vue 3",
+      "Ionic",
+      "Kotlin",
+      "Swift",
+      "GitLab"
+    ],
+    "outcomes": [
+      "카메라·위치·푸시 알림 등 핵심 네이티브 기능",
+      "플러그인 버전 관리와 단위 테스트 체계"
+    ]
+  },
+  {
+    "slug": "smartbiz",
+    "name": "SmartBiz 해외 은행 모바일 플랫폼 전환",
+    "status": "grown",
+    "growth": 5,
+    "summary": "캄보디아 은행 서비스의 모바일 플랫폼 전환. Native와 Frontend를 분리해 확장성을 높였다.",
+    "role": "PM / QA · 개발 (모빌씨앤씨 캄보디아)",
+    "period": "2024.03 – 2024.05",
+    "stack": [
+      "Angular",
+      "Vue 3",
+      "Java",
+      "GitLab",
+      "Redmine"
+    ],
+    "outcomes": [
+      "푸시 알림 누락률 90% 감소, 데이터 유실률 1% 미만",
+      "200개 이상 테스트 케이스로 에러 검출",
+      "계획 대비 3주 앞당겨 완료"
+    ]
+  },
+  {
+    "slug": "cambodia-dev-guide",
+    "name": "캄보디아 개발자 가이드 사이트",
+    "status": "grown",
+    "growth": 3,
+    "summary": "현지 개발자를 위한 다국어 기술 문서 사이트.",
+    "role": "구축 · 번역·문서화 (모빌씨앤씨 캄보디아)",
+    "period": "2024.03 – 2024.05",
+    "stack": [
+      "React",
+      "Docusaurus",
+      "GitLab"
+    ],
+    "outcomes": [
+      "Docusaurus 기반 다국어 가이드 플랫폼",
+      "한글 가이드 영어 번역"
+    ]
+  },
+  {
+    "slug": "iris",
+    "name": "IRIS · B2B 방문판매 앱 AWS 이관",
+    "status": "grown",
+    "growth": 5,
+    "summary": "아모레퍼시픽 B2B 방문판매 모바일 앱의 유지보수·개선과 AWS 서버 이관.",
+    "role": "프론트엔드 개발 · 모니터링·장애 대응 (모빌씨앤씨)",
+    "period": "2023.01 – 2023.12",
+    "stack": [
+      "JavaScript",
+      "jQuery",
+      "Java",
+      "AWS CloudWatch",
+      "InterMax",
+      "JIRA"
+    ],
+    "outcomes": [
+      "일 사용자 1만 명, 동시접속 1천 명 규모 운영",
+      "API 장애 1시간 이내 해결",
+      "Go-live 2일 만에 문의 발생률 80% 감소"
+    ]
+  },
+  {
+    "slug": "asset-management",
+    "name": "사내 자산 관리 시스템",
+    "status": "grown",
+    "growth": 3,
+    "summary": "수작업이던 사내 자산 관리 업무를 디지털화한 시스템.",
+    "role": "프론트엔드 개발 (모빌씨앤씨)",
+    "period": "2023.10 – 2023.12",
+    "stack": [
+      "Vue.js",
+      "Vuetify",
+      "Spring",
+      "Postman"
+    ],
+    "outcomes": [
+      "직원·코드관리, 히스토리 조회",
+      "자산 현황 대시보드"
+    ]
+  },
+  {
+    "slug": "yuga",
+    "name": "YUGA · 사내 개발자 유틸 관리 사이트",
+    "status": "grown",
+    "growth": 3,
+    "summary": "사내 개발자 유틸리티 관리 사이트 유지보수.",
+    "role": "유지보수 · 기능 개발 · QA (모빌씨앤씨)",
+    "period": "2023.01 – 2024.01",
+    "stack": [
+      "Vue 2",
+      "SVN"
+    ],
+    "outcomes": [
+      "권한·필터링 기능 추가",
+      "개발환경 세팅 프로세스 개선, 리팩토링"
+    ]
+  }
+]

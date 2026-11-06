@@ -1,0 +1,71 @@
+---
+title: "더 맵게"
+date: 2024-11-24
+island: library
+room: algo
+tags: []
+---
+##### 1. 문제 파악
+
+- 문제의 요점 : 기준치 보다 낮은 음식들을 조합해 기준치 이상의 음식들을 만들어 내는 문제
+
+##### 2. 내 풀이
+
+```javascript
+class PriorityQueue {
+  constructor() {
+    this.heap = [];
+  }
+  enqueue(value) {
+    this.heap.push(value);
+    let index = this.heap.length - 1;
+    while (index > 0) {
+      const parentIndex = Math.floor((index - 1) / 2);
+      if (this.heap[parentIndex] <= this.heap[index]) break;
+      [this.heap[parentIndex], this.heap[index]] = [
+        this.heap[index],
+        this.heap[parentIndex],
+      ];
+      index = parentIndex;
+    }
+  }
+  dequeue() {
+    if (this.heap.length === 1) return this.heap.pop();
+    const min = this.heap[0];
+    this.heap[0] = this.heap.pop();
+    let index = 0;
+    while (true) {
+      let smallest = index;
+      const left = 2 * index + 1;
+      const right = 2 * index + 2;
+      if (left < this.heap.length && this.heap[left] < this.heap[smallest]) {
+        smallest = left;
+      }
+      if (right < this.heap.length && this.heap[right] < this.heap[smallest]) {
+        smallest = right;
+      }
+      if (smallest === index) break;
+      [this.heap[index], this.heap[smallest]] = [
+        this.heap[smallest],
+        this.heap[index],
+      ];
+      index = smallest;
+    }
+    return min;
+  }
+}
+
+function solution(scoville, K) {
+  var answer = 0;
+  var newScoville = new PriorityQueue();
+  scoville.forEach((element) => newScoville.enqueue(element));
+  while (newScoville.heap[0] < K && newScoville.heap.length > 1) {
+    answer++;
+    newScoville.enqueue(newScoville.dequeue() + newScoville.dequeue() * 2);
+  }
+  if (newScoville.heap[0] < K) {
+    return -1;
+  }
+  return answer;
+}
+```

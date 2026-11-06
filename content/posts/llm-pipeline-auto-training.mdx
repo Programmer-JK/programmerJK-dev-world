@@ -1,0 +1,1301 @@
+---
+title: "LLM 파이프라인 자동 학습·운영 설계"
+date: 2026-01-06
+island: library
+room: ai
+tags: ["MLOps", "Fine-tuning", "NL2SQL", "RAG"]
+---
+## 문서 개요
+
+**목적**: 의도분류, NL2SQL, NL2API, RAG로 구성된 LLM 파이프라인의 자동 학습 및 운영 체계 구축  
+**범위**: 실행 결과 모니터링, 성능 저하 감지, 선택적 자동 학습 트리거  
+**핵심 원칙**: 전체 재학습 최소화, 실패 기반 학습 대상 선정, 안전한 자동화
+
+⚠️ **중요 고지사항**
+
+이 문서는 LLM 파이프라인 자동 학습의 **설계 원칙과 방향성**을 제시합니다.
+
+**실무 적용 시 주의사항**:
+- 제시된 하이퍼파라미터는 출발점이며, 실제 데이터로 실험 필요
+- 트리거 임계값은 서비스 특성에 맞게 조정 필수
+- 자동화는 6개월~1년에 걸쳐 점진적으로 구축
+- 초기에는 수동 검증과 사람 판단이 필수
+- Production 배포 전 충분한 A/B 테스트 권장
+
+---
+
+## 1. 시스템 아키텍처
+
+### 1.1 전체 파이프라인 구조
+
+```
+사용자 쿼리
+    ↓
+의도 분류 (Intent Classification)
+    ↓
+[NL2SQL | NL2API | RAG] 경로 분기
+    ↓
+임베딩 변환 → 벡터DB 검색
+    ↓
+Cross-Encoder 재순위화
+    ↓
+LLM 응답 생성
+    ↓
+실행 결과 + 메타데이터 저장
+    ↓
+모니터링 & Drift 감지
+    ↓
+선택적 학습 트리거
+```
+
+### 성공/실패 케이스 관측 설계
+
+**VectorDB의 이중 역할**
+
+- 검색 엔진으로서의 기능
+- 모든 요청의 실행 결과를 저장하는 공간
+
+**메타데이터 스키마 예시 (실제 개발 단계에선 변경될 가능성 있음)**
+
+```json
+{
+  "timestamp": "2026-01-01T12:00:00Z",
+  "query_id": "uuid",
+  "intent": "NL2SQL",
+  "model_versions": {
+    "embedding": "v2.1",
+    "reranker": "v1.3",
+    "llm": "v4.0"
+  },
+  "retrieval": {
+    "top_k": 10,
+    "hit": true,
+    "rank": 3
+  },
+  "rerank_score": 0.82,
+  "generation": {
+    "parse_ok": false,
+    "hallucination": false
+  },
+  "final_success": false,
+  "error_type": "sql_syntax_error"
+}
+```
+
+> 스키마 항목 : 정의 필요
+
+위 데이터항목을 통해 나중에 "어느 단계에서 틀렸는지" 추적이 가능
+
+---
+
+## 2. 학습 트리거 설계
+
+### 2.1 기본 철학
+
+**❌ 피해야 할 접근**
+
+- 단발성 성능 저하에 즉각 반응
+- 일정 주기마다 무조건 재학습
+- 전체 모델 일괄 업데이트
+
+**✅ 권장 접근**
+
+- 여러 통계정보를 확인하고 계속 떨어지면 학습 진행
+- 통계적으로 의미 있을 때만 학습
+- 실패 원인을 분석해서 실패원인에 따른 모델만 학습
+
+### 2.2 학습 트리거 조건 (3가지 측면)
+
+#### 2.2.1 성능이 계속 떨어짐
+``` 
+Recall@10: 90% → 87% → 84% (3일 연속) 
+→ 이건 문제다, 학습 필요 
+``` 
+기준 예시: 
+- 7일 평균이 5% 이상 하락 
+- 핵심 지표 2개 이상 동시 하락 
+
+#### 2.2.2 데이터 분포가 바뀜 
+``` 
+기존: 재무 문서만 있었음 
+지금: 법률 문서가 전체의 20% 추가됨 
+→ 임베딩 모델이 법률 용어를 못 알아들음 
+``` 
+측정 방법: 
+- 임베딩 벡터의 분포 변화 (KL divergence) 
+- 새로운 도메인 비율 
+
+#### 2.2.3 같은 실패가 반복됨 
+``` 
+"환불 규정" 질문 → "배송 정책" 문서를 계속 잘못 찾음 
+→ 이 패턴이 20% 이상 반복 
+```
+
+### 2.3 실패 원인 추적
+
+#### 2.3.1 역방향 이력 추적 을 통해 원인을 파악
+
+``` 
+최종 답변이 틀렸다
+ ↓ 
+LLM이 잘못 생성했나? → NO
+ ↓ 
+순위가 잘못됐나? (Re-ranker) → NO 
+ ↓ 
+검색 자체가 실패했나? (Embedding) → YES! 
+```
+
+#### 2.3.2 RAG 실패 추적
+
+```
+Answer 품질 저하
+├─ Recall@k 하락
+│   └─ Embedding 문제
+├─ Recall 유지 + Rank 하락
+│   └─ Cross-Encoder(Re-ranker) 문제
+└─ Context 정상 + Answer 오류
+    └─ LLM 생성 문제
+```
+
+#### 2.3.3 NL2SQL/NL2API 실패 추적
+
+```
+Query / API Call 실패
+├─ Intent 해석 실패
+│   └─ Intent Classifier 오류
+├─ 스키마·컬럼 매칭 실패
+│   └─ Embedding 품질 저하
+│   └─ Re-ranker 선택 오류
+├─ Syntax 오류
+│   └─ 경량 LLM 생성 안정성 문제
+└─ 복잡한 추론 실패
+    └─ 메인 LLM Reasoning 한계
+```
+
+---
+
+## 3. 모델별 학습 전략
+
+### 3.1 Embedding Model
+
+**학습 시점 판단 기준**
+
+- 검색 정확도가 계속 떨어지고, 질문–문서 매칭이 불안정해졌을 때
+
+**학습 방식**
+
+- **방법**: Contrastive Learning / Triplet Loss
+- **데이터**: 실패 쿼리 + hard negative 샘플
+- **Epoch**: 1~3 (과적합 방지)
+- **Learning Rate**: 5e-6 ~ 1e-5 (기존 모델 기반)
+- **특징**: 모델을 전부 다시 학습하지 않고, 일부만 점진적으로 조정
+
+**실제 코드 구조 예시**
+
+```python
+def build_embedding_samples(log):
+    """실패 로그에서 학습 데이터 생성"""
+    q = log["query"]
+    positives = log["used_doc_ids"]
+    negatives = [
+        d["doc_id"] for d in log["retrieved_docs"]
+        if d["doc_id"] not in positives
+    ]
+    
+    return [{
+        "query": q,
+        "pos": p,
+        "neg": negatives[:2]  # hard negative만 사용
+    } for p in positives]
+
+def training_step(model, batch, loss_fn):
+    q_emb = model.encode(batch["query"])
+    p_emb = model.encode(batch["pos"])
+    n_emb = model.encode(batch["neg"])
+    
+    loss = contrastive_loss(q_emb, p_emb, n_emb)
+    return loss
+```
+
+### 3.2 Cross-Encoder (Re-ranker)
+
+**학습 시점 판단 기준**
+
+- 검색 결과는 나오지만, 어떤 게 더 좋은 결과인지 제대로 판단하지 못하는 상태가 반복할 때
+
+**학습 방식**
+
+- **방법**: Pairwise / Listwise Ranking
+- **데이터**: Recall 성공 + Rank 실패 샘플
+- **Epoch**: 2~5
+- **특징**: 빈번한 소규모 학습 (weekly)
+
+**실제 코드 구조 예시**
+
+```python
+def build_reranker_samples(log):
+    """Ranking 실수 케이스 추출"""
+    if not log["success"]:
+        return []
+    
+    used = set(log["used_doc_ids"])
+    samples = []
+    
+    for d in log["retrieved_docs"]:
+        if d["doc_id"] not in used:
+            samples.append((
+                log["query"],
+                random.choice(list(used)),  # positive
+                d["doc_id"]                  # negative
+            ))
+    return samples
+
+def training_step(model, batch):
+    score_pos = model(batch["query"], batch["doc_pos"])
+    score_neg = model(batch["query"], batch["doc_neg"])
+    
+    loss = margin_ranking_loss(score_pos, score_neg)
+    return loss
+```
+
+### 3.3 경량 LLM (NL2SQL/NL2API)
+
+**학습 시점 판단 기준**
+
+- SQL/API 호출 품질 저하(문법 오류·포맷 오류·명령 불이행 포함)될 경우
+
+**학습 방식**
+
+- **방법**: LoRA 기반 Supervised Fine-Tuning
+- **데이터**: 실패 쿼리 + 검증된 정답 출력
+- **Epoch**: 1~2
+- **LoRA Rank**: 8~16 (경량 유지)
+- **특징**: 자동화에 가장 적합, 빠른 수렴
+
+**실제 코드 구조 예시**
+
+```python
+from peft import LoraConfig, get_peft_model
+
+def setup_lora_model(base_model):
+    lora_config = LoraConfig(
+        r=8,
+        lora_alpha=16,
+        target_modules=["q_proj", "v_proj"],
+        lora_dropout=0.05,
+        bias="none"
+    )
+    return get_peft_model(base_model, lora_config)
+
+def training_step(model, batch):
+    outputs = model(
+        input_ids=batch["input_ids"],
+        labels=batch["labels"]
+    )
+    return outputs.loss
+```
+
+
+---
+
+## 4. 모델별 학습 방법 상세
+
+### 4.1 Embedding Model 학습
+
+#### 학습 방법론
+
+**Contrastive Learning / Triplet Loss 기반**
+
+기본 원리는 "관련 있는 문서는 가깝게, 관련 없는 문서는 멀게" 임베딩 공간에 배치하는 것
+
+**Triplet Loss 수식**
+
+```
+L = max(0, d(q, p) - d(q, n) + margin)
+
+여기서:
+- q: query embedding
+- p: positive document embedding (관련 문서)
+- n: negative document embedding (비관련 문서)
+- d(·): distance function (보통 cosine distance)
+- margin: 최소 분리 거리 (일반적으로 0.5)
+```
+
+**실제 구현 코드 예시**
+
+```python
+import torch
+import torch.nn.functional as F
+from sentence_transformers import SentenceTransformer
+
+class ContrastiveLoss(torch.nn.Module):
+    def __init__(self, margin=0.5):
+        super().__init__()
+        self.margin = margin
+    
+    def forward(self, query_emb, pos_emb, neg_embs):
+        """
+        Args:
+            query_emb: (batch_size, hidden_dim)
+            pos_emb: (batch_size, hidden_dim)
+            neg_embs: (batch_size, num_negatives, hidden_dim)
+        """
+        # Positive pair distance
+        pos_dist = 1 - F.cosine_similarity(query_emb, pos_emb)
+        
+        # Negative pairs distance
+        neg_dists = 1 - F.cosine_similarity(
+            query_emb.unsqueeze(1), 
+            neg_embs, 
+            dim=-1
+        )
+        
+        # Triplet loss: positive는 가깝게, negative는 멀게
+        losses = torch.clamp(
+            pos_dist.unsqueeze(1) - neg_dists + self.margin, 
+            min=0.0
+        )
+        
+        return losses.mean()
+
+def train_embedding_model(
+    base_model_path: str,
+    training_data: List[Dict],
+    epochs: int = 2,
+    batch_size: int = 32,
+    lr: float = 5e-6
+):
+    """Embedding 모델 학습"""
+    
+    # 1. 기존 모델 로드
+    model = SentenceTransformer(base_model_path)
+    model.train()
+    
+    # 2. 하위 레이어 freeze (일반 표현 보존)
+    for name, param in model.named_parameters():
+        if 'encoder.layer' in name:
+            layer_num = int(name.split('.')[2])
+            if layer_num < 6:  # 하위 6개 레이어 freeze
+                param.requires_grad = False
+    
+    # 3. Loss 및 Optimizer 설정
+    loss_fn = ContrastiveLoss(margin=0.5)
+    optimizer = torch.optim.AdamW(
+        filter(lambda p: p.requires_grad, model.parameters()),
+        lr=lr
+    )
+    
+    # 4. 학습 루프
+    for epoch in range(epochs):
+        total_loss = 0
+        for batch in create_batches(training_data, batch_size):
+            # Encode
+            query_emb = model.encode(batch['queries'], convert_to_tensor=True)
+            pos_emb = model.encode(batch['positives'], convert_to_tensor=True)
+            neg_embs = model.encode(batch['negatives'], convert_to_tensor=True)
+            neg_embs = neg_embs.view(len(batch['queries']), -1, model.get_sentence_embedding_dimension())
+            
+            # Loss 계산
+            loss = loss_fn(query_emb, pos_emb, neg_embs)
+            
+            # Backpropagation
+            optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+            
+            total_loss += loss.item()
+        
+        print(f"Epoch {epoch+1}/{epochs}, Loss: {total_loss/len(training_data):.4f}")
+    
+    return model
+```
+
+**Hard Negative Mining 전략**
+
+Hard negative는 "쿼리와 유사해 보이지만 실제로는 관련 없는 문서"로, 모델이 어려운 케이스를 학습하도록 합니다.
+
+```python
+def mine_hard_negatives(query, documents, model, top_k=5):
+    """실패 로그에서 hard negative 추출"""
+    
+    # 1. 모든 문서에 대해 유사도 계산
+    query_emb = model.encode(query)
+    doc_embs = model.encode(documents)
+    similarities = cosine_similarity([query_emb], doc_embs)[0]
+    
+    # 2. 높은 유사도이지만 관련 없는 문서 선택
+    hard_negatives = []
+    for doc, sim in zip(documents, similarities):
+        if sim > 0.6 and not doc.is_relevant:  # 높은 유사도 + 비관련
+            hard_negatives.append(doc)
+    
+    return hard_negatives[:top_k]
+```
+
+---
+
+### 4.2 Cross-Encoder (Re-ranker) 학습
+
+#### 학습 방법론
+
+**Pairwise Ranking Loss**
+
+Re-ranker는 (query, document) 쌍의 관련도 점수를 직접 예측합니다.
+
+**Margin Ranking Loss 수식**
+
+```
+L = max(0, -(score_pos - score_neg) + margin)
+
+여기서:
+- score_pos: positive document의 예측 점수
+- score_neg: negative document의 예측 점수
+- margin: 최소 점수 차이 (일반적으로 0.3)
+```
+
+**실제 구현 코드 예시**
+
+```python
+import torch
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+class RerankingModel:
+    def __init__(self, base_model_path: str):
+        self.model = AutoModelForSequenceClassification.from_pretrained(
+            base_model_path,
+            num_labels=1  # regression for relevance score
+        )
+        self.tokenizer = AutoTokenizer.from_pretrained(base_model_path)
+    
+    def score(self, query: str, document: str):
+        """Query-Document 관련도 점수 계산"""
+        inputs = self.tokenizer(
+            query, 
+            document,
+            padding=True,
+            truncation=True,
+            max_length=512,
+            return_tensors='pt'
+        )
+        
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+            score = outputs.logits.squeeze(-1)
+        
+        return score.item()
+
+def train_reranker(
+    base_model_path: str,
+    training_data: List[Dict],
+    epochs: int = 3,
+    batch_size: int = 16,
+    lr: float = 2e-5
+):
+    """Re-ranker 모델 학습"""
+    
+    model = AutoModelForSequenceClassification.from_pretrained(
+        base_model_path,
+        num_labels=1
+    )
+    tokenizer = AutoTokenizer.from_pretrained(base_model_path)
+    model.train()
+    
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    margin_loss = torch.nn.MarginRankingLoss(margin=0.3)
+    
+    for epoch in range(epochs):
+        total_loss = 0
+        for batch in create_batches(training_data, batch_size):
+            # Tokenize positive pairs
+            pos_inputs = tokenizer(
+                batch['queries'],
+                batch['doc_positives'],
+                padding=True,
+                truncation=True,
+                max_length=512,
+                return_tensors='pt'
+            )
+            
+            # Tokenize negative pairs
+            neg_inputs = tokenizer(
+                batch['queries'],
+                batch['doc_negatives'],
+                padding=True,
+                truncation=True,
+                max_length=512,
+                return_tensors='pt'
+            )
+            
+            # Forward pass
+            pos_scores = model(**pos_inputs).logits.squeeze(-1)
+            neg_scores = model(**neg_inputs).logits.squeeze(-1)
+            
+            # Margin ranking loss
+            # Target = 1 means pos_scores should be higher than neg_scores
+            target = torch.ones_like(pos_scores)
+            loss = margin_loss(pos_scores, neg_scores, target)
+            
+            # Backward pass
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            
+            total_loss += loss.item()
+        
+        print(f"Epoch {epoch+1}/{epochs}, Loss: {total_loss/len(training_data):.4f}")
+    
+    return model
+```
+
+
+---
+
+### 4.3 경량 LLM (NL2SQL/NL2API) 학습
+
+#### 학습 방법론
+
+**LoRA (Low-Rank Adaptation) 기반 Supervised Fine-Tuning**
+
+LoRA는 전체 모델을 학습하지 않고 작은 어댑터만 추가하여 효율적으로 fine-tuning하는 방법입니다.
+
+**LoRA 원리**
+
+```
+원래 가중치 행렬: W ∈ R^(d×k)
+LoRA 분해: ΔW = BA (B ∈ R^(d×r), A ∈ R^(r×k), r << min(d,k))
+
+Forward pass:
+h = Wx + ΔWx = Wx + BAx
+
+학습 파라미터: BA만 (원래 W는 freeze)
+```
+
+**실제 구현 코드 예시**
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import LoraConfig, get_peft_model, TaskType
+
+def setup_lora_model(base_model_path: str):
+    """LoRA 어댑터 설정"""
+    
+    # 1. Base 모델 로드
+    model = AutoModelForCausalLM.from_pretrained(
+        base_model_path,
+        torch_dtype=torch.float16,
+        device_map="auto"
+    )
+    tokenizer = AutoTokenizer.from_pretrained(base_model_path)
+    
+    # 2. LoRA 설정
+    lora_config = LoraConfig(
+        task_type=TaskType.CAUSAL_LM,
+        r=8,                          # LoRA rank (낮을수록 파라미터 적음)
+        lora_alpha=16,                # scaling factor
+        lora_dropout=0.05,
+        target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],  # 어텐션 레이어만
+        bias="none"
+    )
+    
+    # 3. LoRA 어댑터 추가
+    model = get_peft_model(model, lora_config)
+    
+    # 학습 가능 파라미터 확인
+    model.print_trainable_parameters()
+    # 출력 예: trainable params: 4M || all params: 7B || trainable%: 0.06%
+    
+    return model, tokenizer
+
+def train_nl2sql_model(
+    base_model_path: str,
+    training_data: List[Dict],
+    epochs: int = 2,
+    batch_size: int = 8,
+    lr: float = 3e-4
+):
+    """NL2SQL 모델 LoRA fine-tuning"""
+    
+    model, tokenizer = setup_lora_model(base_model_path)
+    model.train()
+    
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    
+    for epoch in range(epochs):
+        total_loss = 0
+        for batch in create_batches(training_data, batch_size):
+            # Instruction formatting
+            prompts = [
+                f"### Instruction: {item['instruction']}\n### Response: {item['output']}"
+                for item in batch
+            ]
+            
+            # Tokenization
+            inputs = tokenizer(
+                prompts,
+                padding=True,
+                truncation=True,
+                max_length=512,
+                return_tensors='pt'
+            )
+            
+            # Forward pass (causal LM loss 자동 계산)
+            outputs = model(
+                input_ids=inputs['input_ids'],
+                attention_mask=inputs['attention_mask'],
+                labels=inputs['input_ids']  # labels = input_ids (teacher forcing)
+            )
+            
+            loss = outputs.loss
+            
+            # Backward pass
+            optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+            
+            total_loss += loss.item()
+        
+        print(f"Epoch {epoch+1}/{epochs}, Loss: {total_loss/len(training_data):.4f}")
+    
+    # LoRA 어댑터만 저장 (몇 MB)
+    model.save_pretrained("./lora_adapters")
+    
+    return model
+```
+
+**학습 데이터 형식 예시**
+
+```python
+training_data = [
+    {
+        "instruction": "2023년 매출 상위 5개 제품을 조회해줘",
+        "output": "SELECT product_name, SUM(revenue) as total_revenue FROM sales WHERE year = 2023 GROUP BY product_name ORDER BY total_revenue DESC LIMIT 5;"
+    },
+    {
+        "instruction": "직원 중 연봉이 평균보다 높은 사람은?",
+        "output": "SELECT name, salary FROM employees WHERE salary > (SELECT AVG(salary) FROM employees);"
+    }
+]
+```
+
+**Output Format Enforcement 예시**
+
+```python
+def enforce_output_format(model_output: str) -> str:
+    """생성된 SQL의 포맷 강제"""
+    
+    # JSON 형식으로 강제
+    if not model_output.startswith("SELECT"):
+        # Retry with explicit format instruction
+        return None
+    
+    # 기본 syntax 검증
+    try:
+        sqlparse.parse(model_output)
+        return model_output
+    except:
+        return None
+```
+
+---
+
+## 학습 방법 비교 요약표
+
+| 모델            | 학습 방법                | Loss 함수             | 학습 데이터                    | Epoch | 특징                              |
+| ------------- | -------------------- | ------------------- | ------------------------- | ----- | ------------------------------- |
+| **Embedding** | Contrastive Learning | Triplet Loss        | (query, pos, neg)         | 1-3   | Hard negative 중요, 하위 레이어 freeze |
+| **Re-ranker** | Pairwise Ranking     | Margin Ranking Loss | (query, doc_pos, doc_neg) | 2-5   | 빠른 수렴, 빈번한 학습                   |
+| **경량 LLM**    | LoRA SFT             | Causal LM Loss      | (instruction, output)     | 1-2   | 파라미터 효율적, 자동화 최적                |
+
+
+---
+
+## 5. 자동 학습 파이프라인
+
+### 5.1 전체 실행 흐름
+
+```
+① 학습 트리거 발생
+    ↓
+② 학습 대상 모델 결정 (실패 원인 분석)
+    ↓
+③ 학습 데이터 자동 생성 (실패 로그 기반)
+    ↓
+④ PyTorch 학습 실행 (기존 모델 기반 Fine-tuning)
+    ↓
+⑤ 고정 Eval 세트로 평가
+    ↓
+⑥ 기존 모델과 Delta 비교
+    ↓
+⑦ 승격(Promote) or 폐기(Rollback)
+```
+
+### 5.2 디렉토리 구조
+
+```
+training/
+├── configs/
+│   ├── embedding.yaml
+│   ├── reranker.yaml
+│   └── llm.yaml
+├── datasets/
+│   ├── embedding_dataset.py
+│   ├── reranker_dataset.py
+│   └── llm_dataset.py
+├── models/
+│   ├── embedding.py
+│   ├── reranker.py
+│   └── lora_llm.py
+├── losses/
+│   ├── contrastive.py
+│   ├── ranking.py
+│   └── sft.py
+├── train.py          # 공통 진입점
+├── eval.py           # 평가 파이프라인
+└── utils/
+    └── mlflow.py     # 실험 추적
+```
+
+### 5.3 공통 진입점 (train.py)
+
+```python
+def main(cfg):
+    # 1. 데이터 로드
+    dataset = build_dataset(cfg)
+    
+    # 2. 기존 모델 로드
+    model = load_base_model(cfg)
+    
+    # 3. Loss 함수 설정
+    loss_fn = build_loss(cfg)
+    
+    # 4. Optimizer 설정
+    optimizer = build_optimizer(model, cfg)
+    
+    # 5. 학습 루프
+    for epoch in range(cfg.epochs):
+        for batch in dataset:
+            loss = training_step(model, batch, loss_fn)
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+    
+    # 6. 모델 저장
+    save_model(model, cfg)
+```
+
+**실행 예시**
+
+```bash
+python train.py \
+  --task embedding \
+  --data_path data/embedding_failures.json \
+  --base_model v2.1 \
+  --epochs 2 \
+  --lr 5e-6
+```
+
+---
+
+## 6. 안전 장치 및 검증
+
+### 6.1 학습 데이터 안전 장치
+
+**자동 생성 데이터 제한**
+
+- Confidence 낮은 로그 제외 (score < 0.7)
+- 자동 생성 데이터 비율 최대 30%
+- 최근 30일 데이터만 사용
+- Intent/도메인 scope 제한
+
+**데이터 품질 검증**
+
+```python
+def validate_training_data(samples):
+    """학습 데이터 품질 검증"""
+    checks = {
+        "min_samples": len(samples) >= 100,
+        "max_auto_ratio": sum(s["auto_generated"] for s in samples) / len(samples) <= 0.3,
+        "recent_only": all(is_recent(s["timestamp"], days=30) for s in samples),
+        "confidence_threshold": all(s["confidence"] >= 0.7 for s in samples)
+    }
+    return all(checks.values())
+```
+
+### 6.2 학습 중단 조건
+
+**Stop Condition**
+
+- Eval 지표 개선 없음 (2 epoch 연속)
+- Validation loss 증가 (early stopping)
+- Epoch 상한 도달 (3 epoch)
+- Latency 임계값 초과 (추론 시간 20% 이상 증가)
+
+```python
+class EarlyStopping:
+    def __init__(self, patience=2, min_delta=0.001):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.counter = 0
+        self.best_score = None
+    
+    def __call__(self, val_loss):
+        if self.best_score is None:
+            self.best_score = val_loss
+        elif val_loss > self.best_score - self.min_delta:
+            self.counter += 1
+            if self.counter >= self.patience:
+                return True  # Stop training
+        else:
+            self.best_score = val_loss
+            self.counter = 0
+        return False
+```
+
+### 6.3 평가 및 비교
+
+**고정 Eval 세트 사용**
+
+```python
+def evaluate_model(model, fixed_eval_set):
+    """고정된 평가 세트로 일관성 있는 비교"""
+    metrics = {
+        "recall@10": compute_recall(model, fixed_eval_set, k=10),
+        "mrr": compute_mrr(model, fixed_eval_set),
+        "ndcg@10": compute_ndcg(model, fixed_eval_set, k=10)
+    }
+    return metrics
+```
+
+**Delta 기반 비교**
+
+```python
+def compare_models(baseline_metrics, new_metrics):
+    """기존 모델 대비 Delta만 평가"""
+    delta = {
+        metric: new_metrics[metric] - baseline_metrics[metric]
+        for metric in baseline_metrics.keys()
+    }
+    
+    # 승격 조건
+    promote = (
+        delta["recall@10"] > 0 and
+        delta["mrr"] > 0.01 and
+        latency_increase < 0.2  # 20% 미만 증가
+    )
+    
+    return promote, delta
+```
+
+### 6.4 MLflow 연동
+
+```python
+import mlflow
+
+def train_with_tracking(cfg):
+    with mlflow.start_run():
+        # 파라미터 로깅
+        mlflow.log_params({
+            "task": cfg.task,
+            "base_model": cfg.base_model,
+            "epochs": cfg.epochs,
+            "lr": cfg.lr
+        })
+        
+        # 학습 실행
+        model = train_model(cfg)
+        
+        # 메트릭 로깅
+        metrics = evaluate_model(model, fixed_eval_set)
+        mlflow.log_metrics(metrics)
+        
+        # 모델 저장
+        mlflow.pytorch.log_model(model, "model")
+        
+        # 자동 승격 판단
+        if should_promote(metrics):
+            mlflow.register_model(
+                f"runs:/{mlflow.active_run().info.run_id}/model",
+                name=f"{cfg.task}_production"
+            )
+```
+
+---
+
+
+## 7. 모델 간 의존성 관리
+
+AI 파이프라인은 여러 모델이 **순차적으로 협력**하는 구조다.  
+각 모델은 앞 단계의 출력에 강하게 의존하기 때문에,  
+개별 모델만 개선하면 오히려 **전체 품질이 저하될 수 있다.**
+
+### 7.1 Embedding ↔ Re-ranker 동시 학습 금지
+
+가장 흔한 실패 패턴은 다음과 같다.
+- Embedding 모델 개선으로 검색 결과의 **후보 분포 자체가 변경됨**
+- Re-ranker는 **이전 분포 기준으로 학습된 상태**
+- 결과적으로 최종 선택이 어긋나며 **응답 품질 하락**
+
+즉,
+
+> “각 모델은 좋아졌는데, 파이프라인은 망가진 상태”
+
+가 된다.
+
+#### 각 단계의 역할
+
+- **Embedding**
+    - 질문과 문서를 벡터로 변환해
+    - “어떤 문서를 후보로 볼 것인지”를 결정한다
+
+- **Re-ranker**
+    - Embedding이 고른 후보들 중에서
+    - “어떤 문서가 가장 적절한지”를 다시 정렬한다
+
+Embedding이 바뀌면 Re-ranker가 보는 **문서 후보의 성격 자체가 달라지기 때문에**,  
+두 모델을 동시에 학습하면 판단 기준이 어긋날 가능성이 크다.
+
+#### 안전한 운영 원칙
+
+- Embedding과 Re-ranker는 **동시에 학습하지 않는다**
+- 항상 아래 순서를 따른다.
+	1. **Embedding 모델 학습 및 고정**  
+	    → 어떤 문서를 후보로 가져올지 기준을 먼저 확정한다
+	2. **새 Embedding 기준으로 학습 데이터 재생성**  
+	    → 실제 서비스와 동일한 후보 분포를 만든다
+	3. **Re-ranker 학습**  
+	    → 새로운 후보 분포에 맞춰 올바른 문서를 고르는 법을 학습한다
+	4. **전체 파이프라인 기준 성능 평가**  
+	    → 검색부터 최종 응답까지 한 번에 검증한다
+
+이 순서를 지키지 않으면,  
+부분 최적화가 전체 품질 저하로 이어질 수 있다.
+
+### 7.2 Hard Negative 공유 전략
+
+검색 단계에서 발생한 **실패는 버려지지 않아야 한다.**
+
+Embedding이 헷갈려  
+겉보기에는 비슷하지만 실제로는 틀린 문서를 상위에 올린 경우,  
+이 데이터는 Re-ranker 입장에서 **가장 좋은 학습 재료**다.
+
+#### 각 단계에서의 의미
+
+- **Embedding 단계의 실패**    
+    - 의미적으로 유사해 보이지만
+    - 실제 질문 의도와는 맞지 않는 문서를 선택한 상태
+
+- **Re-ranker의 역할**
+    - 이런 “헷갈리는 후보들” 사이에서
+    - 정확한 문서를 구분해내는 것
+
+#### 운영 원칙
+
+- Embedding이 자주 틀리는 케이스를 수집한다
+- 해당 실패 사례를 Re-ranker 학습에 재사용한다
+- “비슷해 보여도 틀린 선택”이라는 기준을 명확히 학습시킨다
+
+이 과정을 통해 두 모델은  
+**서로 다른 역할을 유지한 채 함께 개선**된다.
+
+---
+
+### 7.3 Canary Evaluation
+
+모델을 개선할 때 반드시 확인해야 할 질문이 있다.
+
+> “정말 전체 서비스 품질이 좋아졌는가?”
+
+Canary Evaluation은  
+**부분 성능 개선이 실제 사용자 경험 개선으로 이어지는지** 확인하는 절차다.
+
+#### 무엇을 비교하는가
+
+- **Embedding 단독 지표**
+    - 검색 Recall, 후보 품질 등
+
+- **전체 파이프라인 지표**
+    - 최종 응답 성공률
+    - 실제 사용 시 정답 여부
+
+Embedding 단독 성능은 좋아졌지만  
+전체 응답 성공률이 하락했다면 → **배포하지 않는다.**
+
+중요한 기준은 하나다.
+
+- **부분 지표가 아니라, 최종 결과**
+    
+
+---
+
+### 7.4 Freeze 전략
+
+모든 모델을 매번 전부 학습시키는 것은  
+불안정하고 비용도 크다.
+
+따라서 모델의 역할에 따라  
+**학습 가능한 범위를 명확히 제한한다.**
+
+#### 각 전략의 의미
+
+|모델|운영 전략|의미|
+|---|---|---|
+|Embedding|하위 레이어 일부 고정|일반적인 언어 의미 표현은 유지|
+|Re-ranker|전체 학습 허용|현재 태스크에 빠르게 적응|
+|경량 LLM|LoRA만 학습|비용과 안정성 균형|
+
+Freeze 전략은  
+“어디까지 바꿀 것인가”를 명확히 정하는 **안전장치**다.
+
+---
+
+## 8. 인간 판단과 자동화의 역할 분리
+
+### 8.1 근본 전제
+
+> **"맞다/틀리다"의 최종 판단은 반드시 사람의 영역**
+
+- 자동 지표는 정답 판별 불가
+- 자동 지표는 성능 악화 **감지**만 수행
+- 자동 지표는 경보 시스템(Alert), 판사(Judge) 아님
+
+### 8.2 자동 지표의 역할
+
+**✅ 할 수 있는 것**
+
+- 이전 상태 대비 성능 변화 감지
+- 이상 구간 식별 및 알림
+- 사람 개입 필요 구간 좁히기
+
+**❌ 할 수 없는 것**
+
+- 절대적 정답 여부 판단
+- 의미적 품질 평가
+- 맥락 이해
+
+### 8.3 인간 판단 개입 지점
+
+**샘플링 기반 검토**
+
+- 자동 지표 임계값 초과 구간
+- 반복 실패 패턴 클러스터
+- 특정 Intent/도메인 집중 실패
+
+**사람 검토 절차**
+
+1. 자동 지표로 감지된 실패 케이스 중 일부를 샘플링한다 (약 100건)
+2. 사람이 실제 실패 여부를 판단한다
+3. 자동 지표 판단과 사람 판단이 크게 어긋나는지 확인한다
+   - 어긋날 경우: 자동 지표 신뢰도 문제로 판단
+4. 사람이 실패로 확정한 사례만 학습 데이터로 사용한다
+
+```
+[자동 지표 모니터링] → 추세 감지
+        ↓
+[이상 감지 알림] → 통계적 유의성
+        ↓
+[인간 샘플 리뷰] → 100개 샘플 검토
+        ↓
+[실패 패턴 정의] → 의미적 해석
+        ↓
+[학습 또는 정책 수정] → 실행 결정
+        ↓
+[효과 검증] → 다시 모니터링
+```
+
+
+### 8.4 운영 핵심 원칙
+
+- 자동 지표는 알림용으로만 사용
+- 학습 데이터에 사람 검증 단계 필수
+- 자동화는 사람 보조 도구로 설계
+
+---
+
+## 9. 실전 사례 및 참고 자료
+
+### 9.1 Embedding Fine-tuning 효과 (Databricks 사례)
+
+**핵심 발견**
+
+- 도메인 특화 임베딩 fine-tuning → Recall@10 대폭 향상
+- 검색 성능 개선이 downstream QA 정확도로 직접 연결
+- 재무/법률 등 전문 도메인에서 특히 효과적
+
+**적용 방법**
+
+```python
+# Domain corpus + synthetic queries로 fine-tune
+training_data = generate_synthetic_queries(domain_corpus)
+finetuned_model = finetune_embedding(
+    base_model="multilingual-e5-large",
+    data=training_data,
+    epochs=2
+)
+
+# Recall 개선 확인
+baseline_recall = evaluate_recall(base_model, eval_set)
+new_recall = evaluate_recall(finetuned_model, eval_set)
+print(f"Recall improvement: {new_recall - baseline_recall:.2%}")
+```
+
+### 9.2 대규모 Embedding + Reranker 학습 (Qwen3 사례)
+
+**Multi-stage Training 전략**
+
+1. 150M synthetic data로 약지도 학습
+2. Cosine similarity 기반 12M 고품질 데이터 선별
+3. Supervised fine-tuning + model merging
+4. Reranker 별도 학습
+
+**실무 적용 포인트**
+
+- Synthetic data 대량 생성 → 고품질 필터링이 핵심
+- Embedding과 Reranker 학습 분리
+- Model merging으로 catastrophic forgetting 방지
+
+### 9.3 ReFIT: Retriever-Reranker Feedback Loop
+
+**핵심 아이디어**
+
+- Reranker의 relevance feedback을 Retriever에 반영
+- Retrieve & Rerank 구조에서 두 모델이 상호 influence
+
+**적용 가능 시나리오**
+
+```python
+def refit_training_loop(retriever, reranker, queries):
+    """Reranker 피드백을 Retriever 학습에 활용"""
+    for epoch in range(3):
+        # 1. Retriever로 문서 검색
+        retrieved_docs = retriever.search(queries)
+        
+        # 2. Reranker로 재순위화 및 relevance 판단
+        reranked = reranker.rerank(queries, retrieved_docs)
+        
+        # 3. Reranker의 high-confidence negative를 
+        #    Retriever 학습에 hard negative로 사용
+        hard_negatives = extract_hard_negatives(reranked)
+        
+        # 4. Retriever fine-tune
+        retriever.train(queries, positives, hard_negatives)
+```
+
+### 9.4 실무 운영 체크리스트
+
+|항목|확인 사항|참고|
+|---|---|---|
+|**데이터 품질**|Synthetic data 비율 ≤ 30%|Qwen3 사례|
+|**평가 일관성**|고정 eval 세트 사용|Databricks 권장|
+|**학습 주기**|경량 모델: 주간, 메인 LLM: 월간|실무 경험|
+|**Rollback 준비**|이전 버전 자동 복구 가능|필수 안전장치|
+|**사람 검토**|학습 데이터 100개 샘플 검증|품질 관리|
+
+---
+
+## 부록 A: 코드 템플릿
+
+### A.1 학습 실행 스크립트
+
+```bash
+#!/bin/bash
+# auto_train.sh
+
+MODEL_TYPE=$1  # embedding, reranker, llm
+DATA_PATH=$2
+
+python train.py \
+    --task ${MODEL_TYPE} \
+    --data_path ${DATA_PATH} \
+    --base_model_version $(get_production_version ${MODEL_TYPE}) \
+    --epochs 2 \
+    --early_stopping \
+    --mlflow_tracking \
+    --auto_promote_threshold 0.01
+```
+
+### A.2 모니터링 쿼리 (SQL)
+
+```sql
+-- 일별 Recall@10 추이
+SELECT 
+    DATE(timestamp) as date,
+    intent,
+    AVG(CASE WHEN retrieval.rank <= 10 THEN 1.0 ELSE 0.0 END) as recall_10
+FROM vector_db_metadata
+WHERE timestamp >= NOW() - INTERVAL '30 days'
+GROUP BY date, intent
+ORDER BY date DESC;
+
+-- 실패 패턴 분석
+SELECT 
+    error_type,
+    COUNT(*) as count,
+    COUNT(*) * 100.0 / SUM(COUNT(*)) OVER() as percentage
+FROM vector_db_metadata
+WHERE final_success = false
+    AND timestamp >= NOW() - INTERVAL '7 days'
+GROUP BY error_type
+ORDER BY count DESC;
+```
+
+### A.3 자동 학습 트리거 로직
+
+```python
+def check_training_trigger(metrics_history, window_days=7):
+    """학습 트리거 조건 확인"""
+    
+    recent_metrics = metrics_history.filter(
+        timestamp >= now() - timedelta(days=window_days)
+    )
+    baseline_metrics = metrics_history.filter(
+        timestamp >= now() - timedelta(days=window_days*2),
+        timestamp < now() - timedelta(days=window_days)
+    )
+    
+    triggers = {
+        "recall_drop": recent_metrics["recall@10"].mean() < baseline_metrics["recall@10"].mean() * 0.95,
+        "mrr_drop": recent_metrics["mrr"].mean() < baseline_metrics["mrr"].mean() * 0.95,
+        "failure_spike": recent_metrics["failure_rate"].mean() > baseline_metrics["failure_rate"].mean() * 1.2,
+        "data_drift": compute_kl_divergence(recent_metrics, baseline_metrics) > 0.1
+    }
+    
+    if sum(triggers.values()) >= 2:
+        return True, triggers
+    
+    return False, triggers
+```
+
+---
+
+## 부록 B: 참고 문헌
+
+1. **Databricks**: "Improving Retrieval and RAG: Embedding Model Fine-tuning"
+    - https://www.databricks.com/blog/improving-retrieval-and-rag-embedding-model-finetuning
+
+2. **Qwen3 Embedding & Reranker**: Multi-stage Training 사례
+    - https://yoonschallenge.tistory.com/1093
+
+3. **ReFIT**: "Relevance Feedback from a Reranker during Inference"
+    - https://arxiv.org/abs/2305.11744
+
+4. **REFINE**: "Retrieval Enhancement through Fine-Tuning via Model Fusion"
+    - https://arxiv.org/abs/2410.12890
+
+## 부록 C: 피해야 할 실패 패턴
+
+### 1. 과적합 (Overfitting)
+- **증상**: 학습 세트는 좋아지지만 실제 성능 하락
+- **원인**: 실패 데이터만 과도하게 학습
+- **해결**: 성공 케이스도 20% 포함, Early stopping
+
+### 2. Distribution Shift
+- **증상**: 특정 도메인만 좋아지고 다른 도메인 나빠짐
+- **원인**: 학습 데이터 불균형
+- **해결**: Stratified sampling, 도메인별 평가
+
+### 3. Catastrophic Forgetting
+- **증상**: 새로운 패턴은 배우지만 기존 패턴 잊어버림
+- **원인**: Learning rate 너무 높음
+- **해결**: LR ≤ 1e-5, Freeze 하위 레이어

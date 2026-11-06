@@ -1,0 +1,128 @@
+---
+title: "데이터 구조 변환"
+summary: "Object, Array, Map 간의 데이터 구조 변환 방법과 활용 예시에 대한 종합적인 가이드"
+date: 2025-01-10
+island: library
+room: frontend
+tags: ["javascript", "data-structures", "object", "array", "map"]
+---
+1. **Object → Array**
+```javascript
+const obj = { a: 1, b: 2, c: 3 };
+
+// [key, value] 쌍의 배열로 변환
+const entries = Object.entries(obj); 
+// [['a', 1], ['b', 2], ['c', 3]]
+
+// key만 추출
+const keys = Object.keys(obj); 
+// ['a', 'b', 'c']
+
+// value만 추출
+const values = Object.values(obj); 
+// [1, 2, 3]
+```
+
+2. **Array → Object**
+```javascript
+const arr = [['a', 1], ['b', 2], ['c', 3]];
+
+// 배열을 객체로 변환
+const obj = Object.fromEntries(arr);
+// { a: 1, b: 2, c: 3 }
+
+// 인덱스를 key로 하는 객체로 변환
+const withIndex = { ...arr };
+// { '0': ['a', 1], '1': ['b', 2], '2': ['c', 3] }
+
+// reduce를 사용한 변환
+const reduced = arr.reduce((acc, [key, value]) => {
+  acc[key] = value;
+  return acc;
+}, {});
+// { a: 1, b: 2, c: 3 }
+```
+
+3. **Map → Array**
+```javascript
+const map = new Map([
+  ['a', 1],
+  ['b', 2],
+  ['c', 3]
+]);
+
+// [key, value] 쌍의 배열로 변환
+const entries = Array.from(map);
+// 또는
+const entries2 = [...map];
+// [['a', 1], ['b', 2], ['c', 3]]
+
+// key만 추출
+const keys = Array.from(map.keys());
+// 또는
+const keys2 = [...map.keys()];
+// ['a', 'b', 'c']
+
+// value만 추출
+const values = Array.from(map.values());
+// 또는
+const values2 = [...map.values()];
+// [1, 2, 3]
+```
+
+4. **Array → Map**
+```javascript
+const arr = [['a', 1], ['b', 2], ['c', 3]];
+
+// 배열을 Map으로 변환
+const map = new Map(arr);
+// Map(3) { 'a' => 1, 'b' => 2, 'c' => 3 }
+```
+
+5. **Object → Map**
+```javascript
+const obj = { a: 1, b: 2, c: 3 };
+
+// Object.entries()를 사용하여 변환
+const map = new Map(Object.entries(obj));
+// Map(3) { 'a' => 1, 'b' => 2, 'c' => 3 }
+```
+
+6. **Map → Object**
+```javascript
+const map = new Map([
+  ['a', 1],
+  ['b', 2],
+  ['c', 3]
+]);
+
+// Object.fromEntries()를 사용하여 변환
+const obj = Object.fromEntries(map);
+// { a: 1, b: 2, c: 3 }
+```
+
+주의할 점들:
+1. Map은 객체를 key로 사용할 수 있지만, Object는 문자열이나 Symbol만 key로 사용할 수 있습니다.
+2. Map은 삽입 순서를 보장하지만, Object는 ES2015 이후에만 순서가 보장됩니다.
+3. Object.entries()는 항상 문자열 키를 반환합니다.
+4. 배열을 객체로 변환할 때 인덱스가 키가 되는 것에 주의해야 합니다.
+
+실제 사용 예시:
+```javascript
+// 객체를 정렬된 배열로 변환
+const obj = { banana: 3, apple: 1, orange: 2 };
+const sorted = Object.entries(obj)
+  .sort(([,a], [,b]) => a - b)
+  .reduce((acc, [key, value]) => {
+    acc[key] = value;
+    return acc;
+  }, {});
+// { apple: 1, orange: 2, banana: 3 }
+
+// Map을 필터링하여 새로운 객체 생성
+const map = new Map([['a', 1], ['b', 2], ['c', 3]]);
+const filtered = Object.fromEntries(
+  Array.from(map).filter(([_, value]) => value > 1)
+);
+// { b: 2, c: 3 }
+```

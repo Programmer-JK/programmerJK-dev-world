@@ -1,0 +1,170 @@
+---
+title: "LangGraph vs LCEL: 언제 무엇을 선택할까?"
+date: 2025-10-24
+island: library
+room: ai
+tags: ["LangGraph", "LangChain", "LCEL"]
+---
+## 들어가며
+
+LCEL은 간단한 오케스트레이션 작업에 추천되지만, 복잡한 상태 관리, 분기, 사이클 또는 다중 에이전트가 필요한 애플리케이션에서는 LangGraph를 사용하는 것이 좋다고 공식 문서에서 명시하고 있지만, 구체적으로 어떤 상황에서 무엇을 써야 하는지 판단하기 어려운 것도 사실입니다.
+
+이 글에서는 LCEL과 LangGraph의 핵심 차이점부터 실제 선택 기준까지 정리해보겠습니다.
+
+## LangGraph란?
+
+### 기본 개념
+
+LangGraph는 LangChain의 전문화된 확장으로 상태 기반 애플리케이션에 중점을 둡니다. 워크플로우를 선형 스크립트로 작성하는 대신, 노드와 엣지의 그래프로 정의합니다 - 본질적으로 상태 머신입니다.
+
+### 등장 배경
+
+- **기존 문제**: LCEL의 선형 파이프라인으로는 복잡한 분기, 루프, 다중 에이전트 시스템을 구현하기 어려움
+- **해결 방식**: 그래프 기반 아키텍처로 동적 라우팅, 상태 관리, 백트래킹을 자연스럽게 지원
+
+### 핵심 특징
+
+1. **그래프 기반 아키텍처**: 루프, 백트래킹, 복잡한 제어 흐름에 대한 네이티브 지원
+2. **중앙화된 상태 관리**: 단계 간 컨텍스트 보존을 위한 중앙화된 상태
+3. **다중 에이전트 지원**: 여러 에이전트가 협업하거나 조정하는 시나리오를 위해 구축됨
+
+## 동작 원리
+
+### 기본 구조
+
+LangGraph는 노드(작업)와 엣지(전환)로 구성된 그래프로 워크플로우를 모델링합니다.
+
+```python
+from langgraph.graph import StateGraph, END
+from typing import TypedDict
+
+# 상태 정의
+class TaskState(TypedDict):
+    user_input: str
+    current_step: str
+    result: str
+    retry_count: int
+
+# 그래프 생성
+workflow = StateGraph(TaskState)
+
+# 노드 추가
+workflow.add_node("analyze", analyze_input)
+workflow.add_node("process", process_task)
+workflow.add_node("validate", validate_result)
+
+# 조건부 엣지 추가
+workflow.add_conditional_edges(
+    "validate",
+    should_retry,
+    {
+        "retry": "process",
+        "success": END,
+        "fail": END
+    }
+)
+
+# 진입점 설정
+workflow.set_entry_point("analyze")
+app = workflow.compile()
+```
+
+### 주요 구성 요소
+
+- **StateGraph**: 상태를 가진 그래프 워크플로우 정의
+- **노드(Nodes)**: 실제 작업을 수행하는 함수들
+- **엣지(Edges)**: 노드 간 전환 조건과 경로
+- **상태(State)**: 전체 워크플로우에서 공유되는 데이터
+
+## 기존 LCEL과의 차이점
+
+|비교 항목|LCEL|LangGraph|
+|---|---|---|
+|아키텍처|선형 파이프라인|그래프 기반|
+|제어 흐름|순차적 실행|분기, 루프, 조건부 라우팅|
+|상태 관리|파이프를 통한 데이터 전달|중앙화된 상태 객체|
+|복잡성|간단한 체인|복잡한 워크플로우|
+|디버깅|단순한 추적|시각화된 그래프 실행 추적|
+
+### 언제 사용해야 할까?
+
+✅ **LCEL 사용이 좋은 경우**
+
+- 단일 LLM 호출이나 간단한 체인 (예: 프롬프트 + LLM + 파서, 간단한 검색 설정 등)
+- 상태가 없는 선형 워크플로우
+- 빠른 프로토타이핑이 필요한 경우
+
+✅ **LangGraph 사용이 좋은 경우**
+
+- 복잡한 체인 (예: 분기, 사이클, 다중 에이전트 등)
+- 다중 턴 대화 시스템, 에이전트 시스템, 또는 협업 에이전트 생태계에서 컨텍스트와 의사결정이 중요한 경우
+- 상태 추적과 백트래킹이 필요한 경우
+
+## 실전 예시
+
+### LCEL로 충분한 경우
+
+```python
+from langchain.prompts import ChatPromptTemplate
+from langchain.chat_models import ChatOpenAI
+from langchain.schema.output_parser import StrOutputParser
+
+# 간단한 요약 체인
+summarize_chain = (
+    ChatPromptTemplate.from_template("다음 텍스트를 요약하세요: {text}")
+    | ChatOpenAI()
+    | StrOutputParser()
+)
+
+result = summarize_chain.invoke({"text": "긴 문서 내용..."})
+```
+
+### LangGraph가 필요한 경우
+
+```python
+from langgraph.graph import StateGraph, END
+
+def should_ask_clarification(state):
+    # 답변 신뢰도가 낮으면 재질문
+    if state["confidence"] < 0.7:
+        return "clarify"
+    return "respond"
+
+# 복잡한 Q&A 시스템
+workflow = StateGraph(ConversationState)
+workflow.add_node("understand", understand_query)
+workflow.add_node("search", search_knowledge)
+workflow.add_node("clarify", ask_clarification)
+workflow.add_node("respond", generate_response)
+
+# 조건부 분기
+workflow.add_conditional_edges(
+    "search",
+    should_ask_clarification,
+    {
+        "clarify": "clarify",
+        "respond": "respond"
+    }
+)
+
+# 루프백 가능
+workflow.add_edge("clarify", "understand")
+workflow.add_edge("respond", END)
+```
+
+### 활용 사례
+
+1. **LCEL 적합**: 문서 번역, 텍스트 요약, 간단한 RAG
+2. **LangGraph 적합**: 팀 협업 시뮬레이션, 토론 시스템, 창의적 협업 플랫폼, 고객 상담 봇
+
+## 마무리
+
+LangChain은 컴포넌트와 LCEL 오케스트레이션의 견고한 기반을 제공하며 빠른 프로토타입, 상태가 없는 작업, 또는 깔끔한 입력-출력 흐름만 필요한 프로젝트에 훌륭합니다. LangGraph는 애플리케이션이 선형 모델을 벗어나 상태, 분기 또는 여러 에이전트가 함께 작업해야 할 때 등장합니다.
+
+더 자세한 학습을 원한다면 LangGraph 공식 문서와 마이그레이션 가이드를 참고해보세요.
+
+### 참고 자료
+
+- [LangGraph 공식 문서](https://langchain-ai.github.io/langgraph/)
+- [LCEL에서 LangGraph로 마이그레이션 가이드](https://python.langchain.com/docs/how_to/migrate_agent/)
+- [LangGraph vs LCEL 비교 가이드](https://python.langchain.com/docs/concepts/lcel/)

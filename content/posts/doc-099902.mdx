@@ -1,0 +1,113 @@
+---
+title: "Provider와 SSG, SSR의 관계"
+date: 2024-12-30
+island: library
+room: frontend
+tags: []
+---
+## 배경
+
+최근 Next.js 프로젝트에서 Jotai Provider를 root layout에 적용하면서 SSG/SSR에 대한 의문이 생겼습니다. Provider를 사용하면 모든 페이지가 SSR로 강제되는 것이 아닌가 하는 걱정이 있었는데, 이에 대해 자세히 알아보았습니다.
+
+## Hydration이란?
+
+Hydration은 정적 HTML에 JavaScript 기능을 주입하여 동적인 웹 앱으로 만드는 과정입니다. 서버에서 생성된 정적 HTML은 JavaScript가 로드되기 전까지는 단순한 마크업 상태입니다. JavaScript가 로드되고 Hydration이 진행되면, 이 정적인 HTML이 사용자와 상호작용이 가능한 동적인 웹 앱으로 변환됩니다.
+
+```tsx
+// 정적 HTML 상태 (JavaScript 로드 전)
+<button>클릭</button>
+
+// Hydration 후
+// - 버튼에 이벤트 리스너가 추가됨
+// - 상태 관리 시스템 활성화
+// - 사용자 상호작용 가능
+<button onClick={handleClick}>클릭</button>
+```
+
+## Provider와 렌더링 방식의 관계
+
+### Provider의 역할
+
+Jotai나 React Query와 같은 Provider들은 애플리케이션의 상태 관리를 위한 context를 제공합니다. root layout에 Provider를 배치하는 것은 전역 상태 관리를 위한 필수적인 설정입니다.
+
+```typescript
+// app/layout.tsx
+export default function RootLayout({
+  children,
+  modal,
+}: Readonly<{
+  children: React.ReactNode;
+  modal: React.ReactNode;
+}>) {
+  const initialState = {
+    isLogin: false,
+  };
+
+  return (
+    <html>
+      <body>
+        <JotaiProvider initialState={initialState}>
+          <ReactQueryProvider>
+            {children}
+            {modal}
+          </ReactQueryProvider>
+        </JotaiProvider>
+      </body>
+    </html>
+  );
+}
+```
+
+### SSG/SSR 결정 요인
+
+페이지의 렌더링 방식(SSG/SSR)은 Provider의 사용 여부가 아닌, 각 페이지의 구현 방식에 따라 결정됩니다:
+
+```typescript
+// SSG로 동작하는 페이지
+export function generateStaticParams() {
+  return {
+    props: {
+      data: "정적 데이터",
+    },
+  };
+}
+
+// SSR로 동작하는 페이지
+export async function generateMetadata() {
+  const data = await fetchData();
+  return {
+    props: { data },
+  };
+}
+```
+
+## Hydration과 initialState
+
+### Hydration 프로세스
+
+1. SSG로 빌드된 정적 HTML이 클라이언트로 전송됨
+2. 클라이언트에서 JavaScript가 로드됨
+3. Hydration 과정에서 Provider의 initialState가 주입됨
+4. 전역 상태 관리 시스템 활성화
+
+### initialState와 SSG
+
+Provider에 설정된 initialState는 hydration 과정에서 클라이언트에 주입되어 SSG로 동작합니다. 이는 빠른 초기 로딩과 전역 상태 관리라는 두 가지 이점을 모두 얻을 수 있게 해줍니다.
+
+## 주의사항
+
+### Hydration 불일치 방지
+
+서버와 클라이언트의 initialState는 동일해야 hydration 불일치를 피할 수 있습니다. 불일치가 발생하면 React에서 경고를 표시할 수 있습니다.
+
+### 성능 최적화
+
+- SSG의 장점: 빠른 초기 로딩, CDN 캐싱 가능
+- Provider의 장점: 전역 상태 관리, 서버 상태 관리
+- 두 기능은 서로 독립적으로 작동하며, 함께 사용했을 때 시너지를 낼 수 있습니다.
+
+## 결론
+
+Jotai를 전역적으로 사용하려면 Provider를 root layout에 추가해야 합니다. SSG/SSR 방식의 차이는 해당 페이지의 구현 방식에 따라 결정되며, Provider의 사용이 SSR을 강제하지 않습니다. Provider에 설정된 initialState는 hydration 과정에서 클라이언트에 주입되어 SSG로 동작하게 됩니다.
+
+이러한 이해를 바탕으로 Next.js 프로젝트에서 Provider와 SSG/SSR을 효과적으로 활용할 수 있습니다.

@@ -1,0 +1,169 @@
+---
+title: "html 캡처 라이브러리 cors 에러"
+date: 2025-04-14
+island: library
+room: frontend
+tags: []
+---
+`html-to-image` 또는 `html2canvas`를 사용해 DOM 요소를 이미지로 추출할 때, 외부 이미지나 CSS에 포함된 리소스 때문에 다음과 같은 CORS 에러가 자주 발생하여 이번 기회에 정리하고자 합니다.
+
+```
+SecurityError: Failed to read the 'cssRules' property from 'CSSStyleSheet'
+Access to fetch at [image URL] from origin 'null' has been blocked by CORS policy
+```
+
+---
+
+## 💣 문제 원인
+
+- **외부 이미지** 또는 **외부 CSS에서 참조되는 이미지**가 **CORS 정책에 의해 브라우저에서 차단**되기 때문입니다.
+- Canvas로 그리기 위해선 리소스가 **동일 출처**이거나, 해당 서버가 **Access-Control-Allow-Origin**을 설정해야 합니다.
+- 그렇지 않으면 Canvas 자체가 "tainted"되어 `toDataURL()` 호출 시 예외가 발생합니다.
+
+---
+
+## ✅ 해결 방법 요약
+
+| 방법 | 설명 | 장점 | 단점 |
+|------|------|------|------|
+| 1. 외부 이미지 Base64로 변환 | JavaScript로 이미지 로드 후 Base64 변환하여 직접 삽입 | 간단, 프론트엔드에서 해결 가능 | CORS 허용된 이미지에만 가능 |
+| 2. 이미지 프록시 서버 사용 | 외부 이미지를 백엔드에서 받아와 CORS 허용 후 전달 | 모든 이미지 지원 가능 | 서버 개발 필요 |
+| 3. CSS의 외부 이미지 직접 Base64 삽입 | `url(data:image/png;base64,...)` 형식으로 CSS 수정 | 완전한 해결 | CSS 수정 필요 |
+| 4. 빌드 도구로 자동 인라인 처리 | webpack/Vite에서 asset을 Base64로 자동 인라인 | 유지보수 쉬움 | 번들러 사용 필요 |
+| 5. html2canvas + `useCORS: true` | 간단한 옵션 사용 | 빠른 시도 | 여전히 CORS 차단 시 실패함 |
+
+---
+
+## 🔧 1. 외부 이미지 Base64로 변환 (프론트엔드에서)
+
+```ts
+function imageUrlToBase64(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      canvas.getContext("2d").drawImage(img, 0, 0);
+      try {
+        resolve(canvas.toDataURL("image/png"));
+      } catch (e) {
+        reject(e);
+      }
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+// 사용 예시
+imageUrlToBase64("https://example.com/image.png").then((base64) => {
+  document.querySelector("#img").src = base64;
+});
+```
+
+> 이 방식은 이미지가 CORS 허용 상태여야만 동작합니다.
+
+---
+
+## 🔧 2. 프록시 서버를 통해 이미지 우회
+
+Node.js Express 예시:
+
+```ts
+app.get('/proxy-image', async (req, res) => {
+  const imageUrl = req.query.url;
+  const response = await fetch(imageUrl);
+  const buffer = await response.buffer();
+  res.set('Content-Type', 'image/png');
+  res.set('Access-Control-Allow-Origin', '*');
+  res.send(buffer);
+});
+```
+
+프론트엔드에서:
+```html
+<img src="/proxy-image?url=https://example.com/image.png" />
+```
+
+---
+
+## 🔧 3. CSS의 외부 이미지 → Base64로 직접 삽입
+
+```css
+/* before */
+.element {
+  background-image: url('https://example.com/bg.png');
+}
+
+/* after */
+.element {
+  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAA...');
+}
+```
+
+---
+
+## 🔧 4. Vite/Webpack에서 자동 인라인 처리
+
+### Vite 예시
+```ts
+export default defineConfig({
+  build: {
+    assetsInlineLimit: 100_000, // 100KB 이하 이미지는 base64로 자동 인라인됨
+  },
+});
+```
+
+### Webpack 예시 (url-loader)
+```js
+{
+  test: /\.(png|jpg|gif)$/i,
+  use: [
+    {
+      loader: 'url-loader',
+      options: {
+        limit: 8192, // 8KB 이하일 경우 base64 처리
+      },
+    },
+  ],
+}
+```
+
+---
+
+## ⚠️ 주의사항
+
+- **CORS 정책은 클라이언트에서 우회 불가** — 서버가 허용하지 않으면 JavaScript에서는 이미지 접근 차단됨
+- **CSS에 포함된 외부 이미지도 동일한 문제** 발생함
+- 외부 도메인의 이미지나 스타일을 사용할 경우엔 **가능하면 사전에 base64 변환**하거나, **서버 측에서 처리**하는 게 안전함
+
+---
+
+## 🖼 예시: html-to-image 적용 코드
+
+```ts
+import { toPng } from 'html-to-image';
+
+toPng(document.querySelector('#capture'), {
+  skipFonts: true,
+})
+.then((dataUrl) => {
+  const link = document.createElement('a');
+  link.href = dataUrl;
+  link.download = 'capture.png';
+  link.click();
+})
+.catch((err) => {
+  console.error('이미지 생성 실패:', err);
+});
+```
+
+---
+
+## 🧶 마무리
+
+`html-to-image`나 `html2canvas`를 사용하는 경우, 외부 이미지와 CSS 리소스에 대해 CORS 문제를 반드시 고려해야 합니다. Base64 처리나 서버 프록시 등의 우회 방법을 통해 안정적으로 이미지 추출을 구현할 수 있습니다.
+
+---
