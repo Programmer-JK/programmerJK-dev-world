@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import type { Project } from '@/lib/content';
+import { useEffect, useRef, useState } from 'react';
+import type { PostMeta, Project } from '@/lib/content';
+import PostRow from '@/components/PostRow';
 
 const ST = {
   growing: { label: '자라는 중', tag: 'GROWING', c: '#d7f36b', icon: '/pixel/icon-forest.png', dim: false },
@@ -12,8 +13,9 @@ const ST = {
   ruins: { label: '유적이 된 것', tag: 'RUINS', c: '#e08a4f', icon: '/pixel/icon-ruins.png', dim: false },
 } as const;
 
-export default function ForestGrid({ projects, records, ruins }: { projects: Project[]; records: Record<string, number>; ruins: Record<string, number> }) {
+export default function ForestGrid({ projects, related, ruins }: { projects: Project[]; related: Record<string, PostMeta[]>; ruins: Record<string, number> }) {
   const [filter, setFilter] = useState<'all' | Project['status']>('all');
+  const [open, setOpen] = useState<Project | null>(null); // "관련 기록" 팝업
   const opts = [{ id: 'all' as const, label: '전체', c: '#8d9bb3' }, ...(Object.keys(ST) as Project['status'][]).map((k) => ({ id: k, label: ST[k].label, c: ST[k].c }))];
   const list = projects.filter((p) => filter === 'all' || p.status === filter);
   const router = useRouter();
@@ -21,7 +23,7 @@ export default function ForestGrid({ projects, records, ruins }: { projects: Pro
   const [editing, setEditing] = useState<string | null>(null); // slug, 또는 새 나무는 NEW
   const [error, setError] = useState('');
   useEffect(() => {
-    fetch('/api/scribe/me').then((r) => r.json()).then((d: { ok: boolean }) => setCanEdit(d.ok)).catch(() => {});
+    fetch('/api/scribe/me').then((r) => r.json()).then((d: { ok: boolean }) => setCanEdit(d.ok)).catch(() => { });
   }, []);
 
   async function save(next: Project[]) {
@@ -84,19 +86,57 @@ export default function ForestGrid({ projects, records, ruins }: { projects: Pro
                   {p.outcomes.map((o) => <li key={o} style={{ display: 'flex', gap: 10, fontSize: 14, lineHeight: 1.6, color: 'var(--text2)' }}><span aria-hidden style={{ flex: '0 0 8px', height: 8, marginTop: 7, background: st.c, border: '1px solid var(--ink)' }} />{o}</li>)}
                 </ul>
                 <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: '1px solid var(--line2)', display: 'flex', gap: 16, fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-                  <Link href={`/library`}>관련 기록 {records[p.slug] ?? 0}편 →</Link>
-                  {(ruins[p.slug] ?? 0) > 0 && <a href="#ruins" className="t-sand">유적 {ruins[p.slug]}곳 →</a>}
-                  {canEdit && <span style={{ marginLeft: 'auto', display: 'flex', gap: 12 }}>
-                    <button type="button" onClick={() => setEditing(p.slug)} style={linkBtn}>수정</button>
-                    <button type="button" onClick={() => remove(p)} style={{ ...linkBtn, color: '#e08a4f' }}>삭제</button>
-                  </span>}
-                </div>
+                  {(related[p.slug]?.length ?? 0) > 0
+                    ? <button type="button" onClick={() => setOpen(p)} aria-haspopup="dialog" style={{ ...linkBtn, color: 'var(--accent-text)' }}>관련 기록 {related[p.slug].length}편 →</button>
+                    : <span style={{ color: 'var(--muted2)' }}>관련 기록 0편</span>}
+                  {(ruins[p.slug] ?? 0) > 0 && <a href="#ruins" className="t-sand" style={{ alignSelf: 'center' }}>유적 {ruins[p.slug]}곳 →</a>}
+                {canEdit && <span style={{ marginLeft: 'auto', display: 'flex', gap: 12 }}>
+                  <button type="button" onClick={() => setEditing(p.slug)} style={linkBtn}>수정</button>
+                  <button type="button" onClick={() => remove(p)} style={{ ...linkBtn, color: '#e08a4f' }}>삭제</button>
+                </span>}
               </div>
+            </div>
             </article>
-          );
+      );
         })}
-      </div>
+    </div >
+      { open && <RecordsDialog project={open} posts={related[open.slug] ?? []} onClose={() => setOpen(null)} />
+}
     </>
+  );
+}
+
+/** 프로젝트 카드의 "관련 기록" 팝업: Esc · 바깥 클릭 · ✕로 닫고, 닫으면 누른 버튼으로 포커스를 돌려줍니다. */
+function RecordsDialog({ project, posts, onClose }: { project: Project; posts: PostMeta[]; onClose: () => void }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const back = document.activeElement as HTMLElement | null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    closeRef.current?.focus();
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', k);
+    return () => { window.removeEventListener('keydown', k); document.body.style.overflow = overflow; back?.focus(); };
+  }, [onClose]);
+
+  return (
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(6,14,10,.72)' }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="rec-title" className="pop"
+        style={{ width: 'min(760px, 100%)', maxHeight: 'min(80vh, 720px)', display: 'flex', flexDirection: 'column', background: 'var(--bg)', border: '3px solid #40916c', boxShadow: '8px 8px 0 rgba(0,0,0,.45)', color: 'var(--text)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '18px 20px', borderBottom: '2px solid var(--line3)' }}>
+          <img className="px" src="/pixel/icon-forest.png" alt="" width={40} height={40} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span className="pixel-label t-lime" style={{ fontSize: 10 }}>RELATED RECORDS · {posts.length}</span>
+            <h2 id="rec-title" style={{ margin: 0, fontSize: 20, fontWeight: 900 }}>「{project.name}」 관련 기록</h2>
+          </div>
+          <button ref={closeRef} type="button" aria-label="닫기" onClick={onClose} style={{ width: 40, height: 40, flex: '0 0 auto', cursor: 'pointer', background: 'transparent', border: '1px solid var(--line3)', color: 'var(--muted)' }}>✕</button>
+        </div>
+        <div style={{ overflowY: 'auto', padding: '0 8px 8px' }}>
+          {posts.map((p) => <PostRow key={p.slug} post={p} />)}
+        </div>
+      </div>
+    </div>
   );
 }
 

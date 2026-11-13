@@ -1,0 +1,330 @@
+---
+title: Ask ZORA 설계 — 온톨로지와 임베딩으로 출처 있는 답변 만들기
+summary: OXID처럼 LLM이 질문을 분류하고, 그래프·임베딩·키워드를 섞어 글을 찾은 뒤, 찾은 글 내용만으로 출처를 붙여 답하는 구조. 대화 기록, 스트리밍, 업로드 자동 분류까지.
+date: 2026-11-13
+island: forest
+room: projects
+tags: [RAG, Ontology, Hybrid Search, Gemini, 설계]
+project: zora-dev-world
+---
+
+블로그의 Ask ZORA를 다시 설계했다. 지금은 키워드 겹침 점수로 글 3편을 고르고, 첫 문장을 이어 붙인 템플릿으로 답한다. 지식 지도용 온톨로지 그래프가 이미 있는데도 질의응답에는 쓰지 않고 있었다. 이 글은 구현 전에 정리한 설계다.
+
+## 1. 배경: OXID에서 가져온 구조
+
+OXID HR AI Platform은 **질의 의도 분류 → 하이브리드 검색(BM25 + 벡터) → 문서 기반 답변** 구조였다. 그때 얻은 교훈은 "벡터만으로는 부족하다. 키워드 검색을 함께 쓰고 질의 유형별로 가중치를 다르게 둔다"였다. Ask ZORA도 같은 구조로 간다.
+
+목표는 이렇다.
+
+- 질문 의도에 맞는 답: 문서 탐색, 읽는 순서, 프로젝트, 관심사, 범위 밖
+- 다른 말로 물어도 찾기: 그래프 + 임베딩 + 키워드 점수를 함께 사용
+- 근거가 있는 답: 찾은 글 내용만으로 답하고, 문장마다 출처 번호 `[n]`
+- 후속 질문 이해("그거 단점은?"), 글자 단위로 나오는 스트리밍 답변
+- `.md` 파일을 올리면 섬/방(카테고리)을 자동으로 정해서 글쓰기 폼에 채우기
+- 키가 없거나 무료 한도가 끝나도 지금 수준의 답은 항상 나오기
+
+LLM은 Gemini 무료 키를 쓰고, 벡터DB는 쓰지 않는다.
+
+## 2. 전체 흐름
+
+```text
+AskZora ── POST /api/ask { q, history }
+   │
+   ▼
+① 라우팅 (LLM 1)  →  intent · concepts · 다시 쓴 query
+   │
+   ├── 그래프 탐색      개념 → RELATES 1-hop → ABOUT 글, SIMILAR 보너스
+   ├── 의미 검색 (임베딩 1)  query 임베딩 ↔ embeddings.json 코사인
+   └── 키워드 점수 (기존)    개념이 없을 때 대체, 동점 정렬
+   │
+   ▼
+② 점수 합산 · 상위 3편   0.6 × 그래프 + 0.4 × 코사인
+   │
+   ▼
+meta 전송 (steps · sources · follow)
+   │
+   ├── doc · order         → ③ 답변 생성 (LLM 2, 스트림) → delta … done
+   └── project · interest · out_of_scope · 실패 → ④ 템플릿 답변 → done
+```
+
+질문 하나에 외부 호출은 최대 3회(라우팅, 임베딩, 답변)다.
+
+## 3. 온톨로지 구조
+
+새로 만들지 않고 지식 지도에 쓰는 `ontology.ts`, `concepts.ts`를 그대로 쓴다. 요청마다 `buildGraph(getAllPosts(), getProjects())`로 그래프를 만든다. 글 수십 편 규모라 캐시는 필요 없다.
+
+```text
+DOMAIN ◀─BELONGS── CONCEPT ◀─ABOUT── DOCUMENT ──PART_OF─▶ PROJECT
+(서가)              │  ▲               │  ▲
+                    └RELATES┘          └SIMILAR┘ (추론)
+```
+
+| 관계 | 방향 | 만드는 곳 | 질의응답에서 쓰는 방법 |
+|---|---|---|---|
+| `BELONGS` | CONCEPT → DOMAIN | `Concept.domain` | steps에 서가 위치 표시 |
+| `RELATES` | CONCEPT ↔ CONCEPT | `Concept.related` | 질문 개념을 1-hop 확장 (가중치 0.5), 후속 질문 추천 |
+| `ABOUT` | DOC → CONCEPT | `keywordExtractor`, conf 0.6~0.97 | 개념에서 글로 넘어가는 주 경로 |
+| `PART_OF` | DOC → PROJECT | frontmatter `project` | 프로젝트 질문의 근거 글 |
+| `SIMILAR` | DOC ↔ DOC | 공유 개념 Jaccard 0.25 이상 | 상위 글의 이웃에 작은 보너스 (×0.3) |
+
+## 4. ① 라우팅 (LLM 호출 1)
+
+OXID의 의도 분류에 해당한다. Gemini에 JSON schema를 주고 이 형태로만 답하게 한다. `intent`와 `concepts`는 enum이라 목록에 없는 값은 나올 수 없다.
+
+```ts
+{
+  intent:   "doc" | "order" | "project" | "interest" | "out_of_scope",
+  concepts: ["rag", "bm25"],                       // CONCEPTS id enum, 0~3개
+  query:    "RAG 검색 품질 개선 BM25 하이브리드",   // 검색용으로 다시 쓴 질문
+}
+```
+
+| intent | 뜻 | 예시 질문 | 다음 단계 |
+|---|---|---|---|
+| `doc` | 글 내용을 묻는 질문 (기본) | LangGraph는 왜 도입했어? | 검색 → LLM 답변 |
+| `order` | 무엇부터 읽을지 | RAG는 어떤 순서로 읽으면 좋아? | 검색 → 단계 순 정렬 → LLM 답변 |
+| `project` | 만든 것, 프로젝트 | 최근엔 어떤 프로젝트를 했어? | PROJECT 노드 → 템플릿 답변 |
+| `interest` | 요즘 관심사 | 요즘 관심사가 뭐야? | 최근 개념 빈도 → 템플릿 답변 |
+| `out_of_scope` | 블로그와 상관없는 질문 | 오늘 날씨 어때? | 기록 밖 질문 안내 + 추천 질문 |
+
+프롬프트에는 개념 목록(`id · label · aliases`), intent 정의와 예시, 대화 기록 최근 3턴을 넣는다. 대화 기록은 후속 질문을 독립된 `query`로 다시 쓰기 위해서다.
+
+> 대체 (키 없음, 429, 오류): 정규식으로 intent를 판별하고(순서·로드맵 → order, 프로젝트·만든 → project, 관심사·요즘 → interest, 나머지 → doc) `extractConcepts(question)`로 개념을 뽑는다. query는 원래 질문 그대로.
+
+## 5. ② 하이브리드 검색
+
+그래프(정리해 둔 관계), 임베딩(의미 유사도), 키워드(기존 토큰 점수)를 섞는다. 그래프 비중을 높게 두는 이유는 직접 정리한 관계라서 왜 이 글이 나왔는지 설명할 수 있기 때문이다.
+
+```text
+개념 가중치  w(c) = 1.0   라우팅이 고른 개념
+                    0.5   RELATES로 이어진 이웃 개념
+
+글 점수      graph(d) = Σ w(c) × conf(d —ABOUT→ c)
+SIMILAR     상위 글 t의 이웃 d:  graph(d) += 0.3 × conf(t—d) × graph(t)
+정규화       graphN(d) = graph(d) / max(graph)          → 0~1
+
+최종 점수    final(d) = 0.6 × graphN(d) + 0.4 × cosine(query, d)
+
+개념이 없음   graphN 자리에 키워드 점수(정규화)
+임베딩 없음   final(d) = graphN(d)
+동점         키워드 점수 → 최신 날짜순
+기준 미달     final < 0.15 만 남으면 found: false
+```
+
+"RAG는 어떤 순서로 읽으면 좋아?"로 계산해 보면 이런 모양이 된다. 숫자는 설명용 예시다.
+
+| 글 | 경로 | graphN | cosine | final |
+|---|---|---|---|---|
+| RAG 글 | rag (1.0) × 0.97 | 1.00 | 0.82 | **0.93** |
+| BM25 글 | bm25 (0.5) × 0.97 | 0.50 | 0.74 | **0.60** |
+| Vector Search 글 | vector (0.5) × 0.91 | 0.47 | 0.70 | **0.56** |
+| Docker 글 | 경로 없음 | 0 | 0.31 | 0.12 (제외) |
+
+`order`일 때는 라우팅 개념의 글 → RELATES 이웃 개념의 글 순으로 단계를 나누고, 같은 단계 안에서는 날짜 오름차순으로 정렬한다. 가중치 0.6/0.4와 기준 0.15는 출발값이고 검증 질문 세트로 조정한다.
+
+## 6. ③ 출처를 붙인 답변 (LLM 호출 2)
+
+`doc`, `order`일 때만 LLM으로 답을 만든다. 문맥은 상위 3편을 번호와 함께 넣는다.
+
+```text
+[1] 글 제목 · 지식 도서관 › AI · LLM · 2026-09-02
+(본문 약 3,000자)
+
+[2] 하이브리드 검색 회고 — 벡터만으로는 부족했던 이유 · 프로젝트 숲 › Project Ruins · 2026-10-07
+(본문)
+```
+
+글당 앞 3,000자만 넣기 때문에 긴 글 뒷부분은 빠진다. 답이 부족하면 `##` 제목 단위로 나눠 query와 가까운 구간을 고르게 바꿀 생각이다.
+
+system 프롬프트 규칙은 다섯 가지다.
+
+1. 문맥에 있는 내용만 말한다. 일반 지식으로 채우지 않는다.
+2. 모든 문장 끝에 근거 글 번호를 하나 붙인다.
+3. 문맥에 답이 없으면 "그 내용은 기록에 없어요"라고 답한다.
+4. 존댓말, 3~5문장. `order`면 읽는 순서대로 설명한다.
+5. 대화 기록은 흐름을 잇는 데만 쓰고, 출처는 이번 문맥 번호만 쓴다.
+
+스트리밍 때문에 JSON이 아니라 일반 텍스트로 받고, 서버가 문장 끝의 `[n]`을 잘라서 화면용 `AskSegment`로 만든다.
+
+```ts
+"…상태 머신으로 다루려고 도입했어요 [1]. 노드마다 재시도를 두기 쉬웠어요 [1]."
+
+→ [{ text: "…상태 머신으로 다루려고 도입했어요", cite: 1 },
+   { text: " 노드마다 재시도를 두기 쉬웠어요", cite: 1 },
+   { text: ".", cite: 0 }]
+```
+
+LLM 출력은 믿지 않고 검증한다.
+
+- `cite`는 1부터 이번 sources 개수까지의 정수만 허용한다. 번호가 없거나 범위 밖인 문장은 버린다.
+- 문장은 300자, 전체는 1,500자로 자른다.
+- 남은 문장이 없으면 기존 템플릿 답변으로 대체한다.
+
+화면(`AskZora.tsx`)은 이미 `answer[].cite`를 `sources[n]`와 연결해서 번호 칩과 글 링크로 보여주기 때문에, 출처 표시는 따로 만들 필요가 없다.
+
+## 7. ④ 프로젝트 · 관심사 · 범위 밖
+
+이 셋은 답이 정해진 데이터에서 나오므로 LLM 답변 호출 없이 템플릿으로 만든다. 무료 한도도 아낀다.
+
+- **project**: `getProjects()`에서 진행 중인 것을 먼저, 최근순으로. PART_OF로 연결된 글이 sources가 되고, summary · role · stack으로 답한다.
+- **interest**: 최근 10편의 ABOUT 개념 빈도를 세서 상위 3개 개념과 대표 글 1편씩.
+- **out_of_scope**: 검색을 건너뛰고 "블로그 기록에 대한 질문만 답할 수 있어요"와 추천 질문.
+
+모든 intent에서 steps는 실제로 지나간 경로를 보여주고, follow(이어서 물어볼 질문)는 시작 개념의 RELATES 이웃으로 만든다.
+
+```text
+steps:  의도: 문서 탐색
+        RAG → BM25, Vector Search 확장 (RELATES)
+        관련 기록 3편 · 의미 검색으로 1편 보강
+        기록 3편을 근거로 답변 작성
+follow: BM25는 어떻게 썼어? / Vector Search 관련 글 있어?
+```
+
+## 8. 대화 기록
+
+서버에는 저장하지 않는다. 브라우저가 최근 3턴(질문, 답변 텍스트)을 들고 있다가 요청마다 `history`로 보낸다. sessionStorage에도 넣어서 페이지를 옮겨도 이어지고, 탭을 닫으면 사라진다. 서버는 배열이 아니면 무시하고, 최대 3턴, 턴당 500자로 자른다.
+
+| 단계 | history 사용 |
+|---|---|
+| 라우팅 | 후속 질문을 독립된 query로 다시 씀. 검색은 이 query로 한다 |
+| 답변 | 말투와 흐름만 이어감. 출처는 이번 턴의 sources만 |
+| 대체 (LLM 없음) | 질문에서 개념이 안 나오면 직전 질문의 개념을 이어서 사용 |
+
+```text
+턴 1  "LangGraph는 왜 도입했어?"   → concepts [langgraph]
+턴 2  "그거 단점은?"
+      라우팅 → intent doc, concepts [langgraph], query "LangGraph 도입 단점 한계"
+```
+
+## 9. 스트리밍 답변
+
+`/api/ask`는 JSON 한 덩어리 대신 `ReadableStream`으로 NDJSON(한 줄에 JSON 하나)을 보낸다.
+
+```text
+브라우저                    /api/ask                     Gemini
+   │── POST { q, history } ──▶│                              │
+   │                          │── 라우팅 + 임베딩 ──────────▶│
+   │◀── meta ─────────────────│◀─────────────────────────────│
+   │                          │── streamGenerateContent ────▶│
+   │◀── delta (문장 + cite) ──│◀── 텍스트 조각 … ────────────│
+   │◀── done (검증된 answer) ─│                              │
+```
+
+```json
+{"type":"meta","steps":["…"],"sources":["…"],"follow":["…"],"found":true}
+{"type":"delta","text":"…도입했어요","cite":1}
+{"type":"done","answer":[{"text":"…","cite":1}]}
+```
+
+- 서버는 Gemini 조각을 버퍼에 모으다가 `[n]`을 만나면 그 문장을 delta로 보낸다. cite가 범위 밖이면 보내지 않고, 끝나면 전체를 검증해서 done으로 확정한다.
+- 화면은 `response.body.getReader()`로 줄 단위로 읽는다. delta는 이어 붙이고, done을 받으면 그 answer로 교체한다. sources가 먼저 오기 때문에 답변이 나오는 동안 출처 카드가 먼저 보인다.
+- LLM을 안 쓰는 경로(템플릿, 대체)도 meta → done만 보내서 화면 처리 경로를 하나로 유지한다.
+- 스트림이 중간에 끊기면 보낸 문장이 있을 때는 그것으로 done, 없을 때는 템플릿 답변으로 done. 답변 중에 새 질문을 하면 `AbortController`로 이전 요청을 취소한다.
+
+## 10. 파일 업로드 자동 분류
+
+`.md`/`.mdx` 파일을 올리면 LLM이 섬/방(카테고리)과 제목·요약·태그를 정해서 글쓰기 폼에 채운다. 바로 저장하지 않고 확인한 뒤 저장한다.
+
+```text
+[파일로 가져오기] → import?dry=1 → frontmatter에 island/room 있나?
+                    (형식·크기 검사)     ├─ 있음 → 그대로 사용
+                                          └─ 없음 → classify() (LLM)
+                                                   → 폼 채움 → 확인 후 저장
+```
+
+```ts
+{
+  place:   "library/ai" | "library/frontend" | … | "inn/log" | … | "forest/experiments", // 13개 enum
+  title:   string,     // 60자 이하
+  summary: string,     // 120자 이하
+  tags:    string[],   // 최대 5개
+}
+```
+
+- place enum은 `ISLANDS`에서 만든다. 프롬프트에는 방마다 "섬 › 방 : 설명"을 넣는다. 예를 들면 "지식 도서관 › AI · LLM : Agent · RAG · LangGraph · NL2SQL".
+- 본문은 앞 6,000자만 보낸다. 분류에는 충분하다.
+- LLM이 준 place는 `getRoom()`으로 한 번 더 확인한다.
+- 대체: `extractConcepts()`로 가장 많이 나온 개념의 domain을 서가로 쓰고, 개념이 없으면 여관 › Adventurer's Log. 제목은 첫 제목 줄이나 파일 이름.
+
+| 항목 | 내용 |
+|---|---|
+| 입력 | multipart `file`. `.md`/`.mdx`, 1MB 이하, UTF-8 텍스트. 나머지는 400 |
+| 인증 | `/api/posts`와 같은 로그인 보호 |
+| `?dry=1` | 저장하지 않고 분류 결과와 `classifiedBy`(llm, rule, frontmatter) 반환 |
+| dry 없음 | `createPost()`로 저장 (dev의 `ALLOW_FS_WRITE`에서만) |
+| 오류 | 기존 `handle()` / `StoreError` 패턴 |
+
+## 11. 임베딩 파이프라인
+
+벡터DB 없이 `content/embeddings.json` 파일 하나에 저장한다. 글 수십 편이면 전체 코사인 계산도 1ms 안쪽이다.
+
+```json
+{
+  "hybrid-search-retro": { "hash": "a1f3…", "vec": [0.012, -0.044] },
+  "good-junior-senior":  { "hash": "9c0e…", "vec": [0.031, 0.008] }
+}
+```
+
+`npm run embed`는 모든 글의 `제목 + 요약 + 본문` sha256 hash를 계산해서, 바뀌었거나 새 글만 임베딩하고 지워진 글은 뺀다. 키가 없으면 아무것도 안 하고 끝낸다. `prebuild`에 연결해서 배포할 때 자동으로 갱신한다. 아직 임베딩되지 않은 새 글은 cosine 0으로, 그래프 점수로만 경쟁한다.
+
+글 하나를 벡터 하나로 만들기 때문에 입력 한도를 넘는 긴 글은 뒷부분이 잘린다. 필요해지면 `##` 단위로 나눠 여러 벡터로 저장한다.
+
+## 12. Gemini 호출과 비용
+
+`src/lib/llm.ts`에서 `fetch`로 REST(`generateContent`, `streamGenerateContent`, `embedContent`)를 호출한다. 의존성은 추가하지 않는다. JSON이 필요한 호출(라우팅, 분류)은 `responseMimeType: "application/json"`과 `responseSchema`를 쓴다.
+
+| 상황 | 질문 1개당 호출 |
+|---|---|
+| doc / order | 라우팅 1 + 임베딩 1 + 답변 1 = 3 |
+| project / interest / out_of_scope | 라우팅 1 (+ 임베딩 1) |
+| 파일 업로드 | 분류 1 (frontmatter에 카테고리가 있으면 0) |
+
+- **비용**: billing을 연결하지 않은 Google Cloud 프로젝트의 키는 무료 한도를 넘으면 429로 거절될 뿐 과금되지 않는다. billing을 연결하면 유료 등급이 되어 초과분이 과금되므로, 이 블로그 전용 프로젝트를 만들고 billing은 연결하지 않는다. 정책은 바뀔 수 있으니 AI Studio 요금 페이지를 한 번 확인한다.
+- **데이터**: 무료 등급 입력(글 본문, 질문)은 Google이 모델 개선에 쓸 수 있다. 공개 블로그 글이라 괜찮지만 비공개 문서는 올리지 않는다.
+
+## 13. 대체 동작
+
+LLM이 하나도 안 돼도 지금 Ask ZORA 수준의 답은 항상 나오게 한다.
+
+| 단계 | 정상 | 키 없음 / 429 / 오류 / 시간 초과 |
+|---|---|---|
+| 라우팅 | LLM 분류 + query 다시 쓰기 | 정규식 + `extractConcepts`, 직전 턴 개념 이어 쓰기 |
+| 의미 검색 | 임베딩 코사인 | 그래프 + 키워드 점수만 |
+| 답변 | LLM 스트림 + `[n]` 출처 | 템플릿 답변 + 출처 |
+| 스트림 끊김 | - | 보낸 문장이 있으면 그걸로 done, 없으면 템플릿 |
+| 업로드 분류 | LLM 분류 | 개념 domain 규칙, 없으면 inn/log |
+
+오류 내용은 서버 로그에만 남기고, steps에 "간단 모드로 답변" 한 줄만 넣는다.
+
+## 14. 진행 순서
+
+1. `llm.ts`와 임베딩 스크립트
+2. 라우팅 · 검색 · 답변 (`ask.ts`, 아직 JSON 응답)
+3. 스트리밍 + 대화 기록 (`/api/ask` NDJSON, `AskZora.tsx`)
+4. 업로드 분류 (`classify.ts`, `/api/posts/import`, 글쓰기 화면 버튼)
+
+`ontology.ts`, `concepts.ts`, 지식 지도 화면, 저장 로직(`store.ts`)은 바꾸지 않고 재사용한다.
+
+## 15. 검증 계획
+
+| 질문 / 동작 | 기대 결과 |
+|---|---|
+| LangGraph는 왜 도입했어? | doc, meta → delta → done 순서, 문장마다 `[n]`, 출처가 실제 LangGraph 글 |
+| (이어서) 그거 단점은? | query가 "LangGraph 단점"으로 다시 쓰임 |
+| RAG는 어떤 순서로 읽으면 좋아? | order, RAG → BM25/Vector 순서로 설명 |
+| 검색 품질 올리는 법 | 사전에 없는 표현인데도 RAG/BM25 글이 나옴 (임베딩) |
+| 최근엔 어떤 프로젝트를 했어? | project, LLM 답변 호출 없음 |
+| 오늘 날씨 어때? | out_of_scope, 검색과 답변 호출 없음 |
+| 키를 빼고 위 질문들 | 템플릿 답변, 오류 없음 |
+| frontmatter 없는 `.md` 업로드 | place가 13개 중 하나 |
+| 2MB 파일, `.exe`, 로그인 없이 업로드 | 400 / 400 / 401 |
+
+`[n]` 파서와 cite 검증은 범위 밖 번호, 번호 없는 문장, 조각 중간에 잘린 `[`로 따로 점검한다.
+
+## 16. 하지 않는 것
+
+- **벡터DB**: 글 수십 편이면 JSON 파일로 충분하다. 수천 편 규모가 되면 다시 검토한다.
+- **파인튜닝**: 글 내용은 검색으로 넣는 쪽이 정확하고, 새 글이 바로 반영된다.
+- **서버 쪽 대화 저장**: 대화는 브라우저 세션에만 남는다.
+- **출처 문장 하이라이트**: 출처는 글 단위로 표시한다.
+- **배포 환경 저장**: 업로드 저장은 기존처럼 dev에서만 된다. 배포에서 저장하려면 GitHub 커밋이나 DB 저장이 따로 필요하다.

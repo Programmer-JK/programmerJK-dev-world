@@ -186,7 +186,7 @@
   {
     "slug": "impac-matching",
     "name": "ImpacMatching",
-    "status": "ruins",
+    "status": "grown",
     "growth": 5,
     "summary": "행사장에서 기업과 바이어의 B2B 미팅을 매칭하는 플랫폼.",
     "role": "사이드 프로젝트 · 개발",
@@ -205,7 +205,7 @@
   {
     "slug": "runique",
     "name": "Runique",
-    "status": "grown",
+    "status": "ruins",
     "growth": 5,
     "summary": "기업 고객과 일반 사용자를 연결하는 B2B 서비스.",
     "role": "Next.js + Spring Boot 풀스택 · 인증·인가 · API 설계",

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import IslandBanner, { type BannerFx } from '@/components/IslandBanner';
-import { getAllPosts, getProjects } from '@/lib/content';
+import { getAllPosts, getProjects, type PostMeta } from '@/lib/content';
 import ForestGrid from './ForestGrid';
 
 const RAY = 'linear-gradient(#efffd066, transparent)';
@@ -18,9 +18,9 @@ export default function ForestPage() {
   const posts = getAllPosts();
   const projects = getProjects();
   const ruinsPosts = posts.filter((p) => p.island === 'forest' && p.room === 'ruins');
-  const records: Record<string, number> = {};
+  const related: Record<string, PostMeta[]> = {}; // 프로젝트별 기록(모든 섬) → 카드의 "관련 기록" 팝업
   const ruins: Record<string, number> = {};
-  for (const p of posts) if (p.project) records[p.project] = (records[p.project] ?? 0) + 1;
+  for (const p of posts) if (p.project) (related[p.project] ??= []).push(p);
   for (const p of ruinsPosts) if (p.project) ruins[p.project] = (ruins[p.project] ?? 0) + 1;
   const projectName = (slug?: string) => projects.find((p) => p.slug === slug)?.name;
 
@@ -30,9 +30,9 @@ export default function ForestPage() {
         desc="직접 만든 것들이 나무가 되어 자라는 숲. 깊은 곳의 유적에는 무너졌던 순간과 거기서 배운 것이 남아 있습니다."
         frame={{ border: '#d8f3dc', inset: '#2f6a43', box: 'rgba(10,24,16,.9)', text: '#cfe6d4' }} />
       <div className="wrap" style={{ paddingTop: 40, paddingBottom: 120 }}>
-        <ForestGrid projects={projects} records={records} ruins={ruins} />
+        <ForestGrid projects={projects} related={related} ruins={ruins} />
 
-        <section id="ruins" aria-label="유적" style={{ marginTop: 56 }}>
+        <section id="ruins" aria-label="유적" style={{ marginTop: 56, scrollMarginTop: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
             <img className="px" src="/pixel/icon-ruins.png" alt="" width={64} height={64} />
             <div>

@@ -37,8 +37,10 @@ export default function Editor({ posts, initial }: { posts: Lite[]; initial: Edi
   const [dragOver, setDragOver] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const [confirmImg, setConfirmImg] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
   const ta = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const mdInput = useRef<HTMLInputElement>(null);
 
   const cur = ISLANDS.find((i) => i.id === island)!;
   const chars = body.replace(/\s/g, '').length;
@@ -125,6 +127,29 @@ export default function Editor({ posts, initial }: { posts: Lite[]; initial: Edi
     }
   }
 
+  // ---------------------------------------------------------------- import (.md → 자동 분류 → 폼 채우기)
+  async function importFile(f: File) {
+    if (dirty && !window.confirm('지금 쓰던 내용이 가져온 파일로 바뀌어요. 계속할까요?')) return;
+    setImporting(true);
+    const fd = new FormData();
+    fd.append('file', f);
+    try {
+      const r = await fetch('/api/posts/import?dry=1', { method: 'POST', body: fd });
+      const d = (await r.json()) as { ok: boolean; error?: string; island?: IslandId; room?: string; title?: string; summary?: string; tags?: string[]; content?: string; classifiedBy?: string };
+      if (!d.ok || !d.island || !d.room) { setToast({ kind: 'error', title: 'IMPORT FAILED', msg: d.error ?? '파일을 가져오지 못했어요.' }); return; }
+      setIsland(d.island); setRoom(d.room); setTitle(d.title ?? ''); setSummary(d.summary ?? ''); setTags((d.tags ?? []).join(', ')); setBody(d.content ?? '');
+      setDirty(true);
+      const isl = ISLANDS.find((i) => i.id === d.island);
+      const place = `${isl?.name} › ${isl?.rooms.find((x) => x.id === d.room)?.name}`;
+      const who = d.classifiedBy === 'llm' ? 'AI가' : d.classifiedBy === 'frontmatter' ? '파일에 적힌 대로' : '개념 사전으로';
+      setToast({ kind: 'ok', title: 'IMPORTED', msg: `${who} 「${place}」에 분류했어요. 확인하고 발행하세요.` });
+    } catch {
+      setToast({ kind: 'error', title: 'IMPORT FAILED', msg: '네트워크 오류' });
+    } finally {
+      setImporting(false);
+    }
+  }
+
   // ---------------------------------------------------------------- save / delete
   async function save(draft: boolean) {
     if (ready < reqTotal) { setToast({ kind: 'error', title: 'CHECK', msg: '섬·방과 제목은 꼭 정해주세요.' }); return; }
@@ -180,6 +205,15 @@ export default function Editor({ posts, initial }: { posts: Lite[]; initial: Edi
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {editing && <button type="button" className="danger-btn" onClick={() => setConfirmDel(true)} disabled={saving}>삭제</button>}
+            {!editing && (
+              <>
+                <button type="button" className="chip" style={{ minHeight: 44 }} onClick={() => mdInput.current?.click()} disabled={importing || saving}>
+                  {importing ? '분류하는 중…' : '파일로 가져오기 (.md)'}
+                </button>
+                <input ref={mdInput} type="file" accept=".md,.mdx,text/markdown" hidden
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) importFile(f); e.target.value = ''; }} />
+              </>
+            )}
             <button type="button" className="chip" style={{ minHeight: 44 }} onClick={() => setPreview((p) => !p)} aria-pressed={preview}>{preview ? '미리보기 끄기' : '미리보기 켜기'}</button>
             <button type="button" className="chip" style={{ minHeight: 44 }} onClick={() => save(true)} disabled={saving}>초안으로 저장</button>
             <button type="button" className="pixel-btn" style={{ fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: 800 }} onClick={() => save(false)} disabled={saving}>
